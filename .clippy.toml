@@ -1,0 +1,45 @@
+# Clippy configuration for retcon
+# https://doc.rust-lang.org/clippy/
+
+# Cognitive complexity threshold for functions
+# Default is 25, we set it slightly lower to encourage simpler functions
+cognitive-complexity-threshold = 20
+
+# Type complexity threshold
+# Warns when types become too complex
+type-complexity-threshold = 250
+
+# Allow longer function names for descriptive TUI event handlers
+too-many-arguments-threshold = 7
+
+# Allow slightly more lines in functions (TUI rendering can be verbose)
+too-many-lines-threshold = 150
+
+# Single character binding threshold
+# Allow single-char bindings in small scopes
+single-char-binding-names-threshold = 4
+
+# Literal representation threshold
+# Decimal literals with more digits trigger suggestion to use separators
+literal-representation-threshold = 10
+
+# Vector initialization threshold for performance warnings
+vec-box-size-threshold = 4096
+
+# Array size threshold for performance warnings
+array-size-threshold = 512000
+
+# Whether to accept a safety comment to be placed above the attributes for the `unsafe` block
+accept-comment-above-attributes = true
+
+# Whether to accept a safety comment to be placed above the statement containing the `unsafe` block
+accept-comment-above-statement = true
+
+# Don't warn about common TUI/terminal naming patterns
+allowed-idents-below-min-chars = ["f", "i", "j", "x", "y", "w", "h", "dx", "dy", "id", "ui"]
+
+# Suppress certain lints that are too noisy for this type of project
+# These can be uncommented if you want to allow specific patterns
+# allow-expect-in-tests = true
+# allow-unwrap-in-tests = true
+# allow-dbg-in-tests = true

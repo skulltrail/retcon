@@ -1,0 +1,50 @@
+# Rustfmt configuration for retcon
+# https://rust-lang.github.io/rustfmt/
+# Using only stable features for compatibility
+
+# Edition to use for formatting
+edition = "2021"
+
+# Maximum line width for code
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use hard tabs instead of spaces
+hard_tabs = false
+
+# Insert blank line at start and end of each file
+newline_style = "Auto"
+
+# Use small heuristics
+use_small_heuristics = "Default"
+
+# Use field init shorthand if possible
+use_field_init_shorthand = true
+
+# Use try shorthand
+use_try_shorthand = true
+
+# Force explicit types instead of `_`
+force_explicit_abi = true
+
+# The following are unstable features that require nightly
+# Uncomment if using nightly toolchain:
+#
+# unstable_features = true
+# imports_granularity = "Crate"
+# group_imports = "StdExternalCrate"
+# imports_layout = "Mixed"
+# wrap_comments = true
+# format_code_in_doc_comments = true
+# format_strings = true
+# format_macro_matchers = true
+# format_macro_bodies = true
+# normalize_comments = false
+# brace_style = "SameLineWhere"
+# trailing_comma = "Vertical"
+# trailing_semicolon = true
+# condense_wildcard_suffixes = true
+# error_on_line_overflow = false
+# error_on_unformatted = false

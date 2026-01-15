@@ -1,0 +1,29 @@
+# Rust toolchain configuration for retcon
+# This ensures all developers and CI use the same Rust version
+# https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file
+
+[toolchain]
+# Use stable Rust channel for maximum compatibility
+channel = "stable"
+
+# Pin to a specific version for reproducible builds
+# Update this periodically to get latest features and fixes
+# Current as of 2026-01-15
+# To update: rustup update stable && rustup show
+# Then update this file with the version shown
+# channel = "1.84.0"
+
+# Required components
+components = [
+    "rustfmt",      # Code formatting
+    "clippy",       # Linting
+    "rust-src",     # Source code for rust-analyzer
+    "rust-analyzer" # IDE support
+]
+
+# Optional: specify targets if cross-compiling
+# targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+# Profile controls how much is installed
+# Options: minimal, default, complete
+profile = "default"

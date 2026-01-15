@@ -1,0 +1,24 @@
+# Cargo configuration for the retcon project
+
+# Coverage with llvm-cov
+# Install: cargo install cargo-llvm-cov
+# Run: cargo llvm-cov --html --open
+
+[build]
+# Incremental compilation for faster builds
+incremental = true
+
+[alias]
+# Convenient test aliases
+test-all = "test --all-features"
+test-unit = "test --lib"
+test-integration = "test --test '*'"
+
+# Coverage aliases
+coverage = "llvm-cov --html --open"
+coverage-report = "llvm-cov --lcov --output-path target/coverage/lcov.info"
+coverage-ci = "llvm-cov --lcov --output-path target/coverage/lcov.info --ignore-filename-regex '(main\\.rs|ui/)'"
+
+# Quick development checks
+quick-check = "check --all-features"
+quick-test = "test --lib"
