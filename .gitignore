@@ -1,0 +1,43 @@
+*[Cc][Ll][Aa][Uu][Dd][Ee]*
+*[Gg][Ee][Mm][Ii][Nn][Ii]*
+
+/target
+Cargo.lock
+
+# Coverage reports
+coverage/
+*.profraw
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+
+# Pre-commit
+.pre-commit-cache/
+
+# Node modules (if using commitlint via npm)
+node_modules/
+package-lock.json
+
+# Python virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# cargo-deny cache
+.cargo-deny/
+
+# Rust analyzer
+.rust-analyzer/
