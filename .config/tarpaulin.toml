@@ -1,0 +1,49 @@
+# Configuration for cargo-tarpaulin
+# Run with: cargo tarpaulin --config .config/tarpaulin.toml
+
+[tarpaulin]
+# Output formats
+out = ["Html", "Lcov", "Stdout"]
+
+# Exclude patterns
+exclude = [
+    "src/main.rs",
+    "src/ui/*",
+    "src/app.rs",
+]
+
+# Include files
+include = [
+    "src/git/*",
+    "src/state/*",
+    "src/error.rs",
+]
+
+# Test options
+all-features = true
+all-targets = false
+workspace = false
+follow-exec = true
+count = true
+ignore-panics = true
+
+# Fail build if coverage below threshold (optional)
+fail-under = 70
+
+# Run tests with --release for faster execution
+release = false
+
+# Timeout for each test
+timeout = "5m"
+
+# Number of jobs (parallel test execution)
+jobs = 4
+
+# CI mode (less verbose output)
+# ciserver = "github-actions"
+
+# Output directory
+output-dir = "target/coverage"
+
+# Report generation
+# engine = "llvm"  # Use llvm engine for more accurate coverage

@@ -1,0 +1,21 @@
+{
+  "name": "retcon",
+  "version": "0.1.0",
+  "description": "Retroactive Continuity CLI - A modern TUI for editing git history",
+  "private": true,
+  "scripts": {
+    "commitlint": "commitlint --edit"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1"
+  },
+  "keywords": [
+    "git",
+    "tui",
+    "history",
+    "rebase",
+    "retcon"
+  ],
+  "license": "MIT"
+}

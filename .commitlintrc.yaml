@@ -1,0 +1,126 @@
+# Commitlint configuration for conventional commits
+#
+# Enforces commit message format: type(scope): description
+#
+# Valid types:
+#   - feat:     New feature
+#   - fix:      Bug fix
+#   - docs:     Documentation changes
+#   - style:    Code style changes (formatting, missing semi-colons, etc.)
+#   - refactor: Code refactoring (neither fixes a bug nor adds a feature)
+#   - perf:     Performance improvements
+#   - test:     Adding or updating tests
+#   - build:    Build system changes (cargo, dependencies, etc.)
+#   - ci:       CI/CD changes (GitHub Actions, etc.)
+#   - chore:    Other changes that don't modify src or test files
+#   - revert:   Revert a previous commit
+#
+# Example valid commits:
+#   feat(ui): add commit table sorting
+#   fix(git): handle empty repositories correctly
+#   docs: update README with installation instructions
+#   refactor(state)!: restructure app state management
+#   chore: update dependencies
+#
+# Breaking changes:
+#   Add '!' after type/scope: feat(api)!: remove deprecated function
+#   Or include 'BREAKING CHANGE:' in commit body
+
+extends:
+  - '@commitlint/config-conventional'
+
+rules:
+  # Type: must be one of the specified types
+  type-enum:
+    - 2  # Error level
+    - always
+    - - feat
+      - fix
+      - docs
+      - style
+      - refactor
+      - perf
+      - test
+      - build
+      - ci
+      - chore
+      - revert
+
+  # Type: must be lowercase
+  type-case:
+    - 2
+    - always
+    - lower-case
+
+  # Type: must not be empty
+  type-empty:
+    - 2
+    - never
+
+  # Scope: must be lowercase if present
+  scope-case:
+    - 2
+    - always
+    - lower-case
+
+  # Scope: optional but recommended (warning level)
+  scope-empty:
+    - 1  # Warning level
+    - never
+
+  # Subject: must not be empty
+  subject-empty:
+    - 2
+    - never
+
+  # Subject: must not end with a period
+  subject-full-stop:
+    - 2
+    - never
+    - '.'
+
+  # Subject: must be lowercase (conventional style)
+  subject-case:
+    - 2
+    - always
+    - lower-case
+
+  # Subject: minimum length to ensure descriptive messages
+  subject-min-length:
+    - 2
+    - always
+    - 10
+
+  # Subject: maximum length for readability
+  subject-max-length:
+    - 2
+    - always
+    - 72
+
+  # Header: maximum length (type + scope + subject)
+  header-max-length:
+    - 2
+    - always
+    - 100
+
+  # Body: use blank line between header and body
+  body-leading-blank:
+    - 2
+    - always
+
+  # Body: max line length for readability
+  body-max-line-length:
+    - 2
+    - always
+    - 100
+
+  # Footer: use blank line between body and footer
+  footer-leading-blank:
+    - 2
+    - always
+
+  # Footer: max line length
+  footer-max-line-length:
+    - 2
+    - always
+    - 100

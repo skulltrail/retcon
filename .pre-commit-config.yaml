@@ -1,0 +1,93 @@
+# Pre-commit hooks configuration for retcon
+#
+# Setup instructions:
+#   1. Install pre-commit: pip install pre-commit
+#   2. Install git hooks: pre-commit install
+#   3. Install commit-msg hook: pre-commit install --hook-type commit-msg
+#
+# Run manually on all files: pre-commit run --all-files
+# Update hooks to latest versions: pre-commit autoupdate
+
+repos:
+  # General file cleanup hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Remove trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Ensure files end with a newline
+      - id: end-of-file-fixer
+
+      # Check for merge conflict markers
+      - id: check-merge-conflict
+
+      # Check for added large files (over 500KB)
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+
+      # Validate YAML files
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom YAML tags
+
+      # Validate TOML files
+      - id: check-toml
+
+      # Check for case conflicts in filenames
+      - id: check-case-conflict
+
+      # Prevent committing directly to main/master
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+
+  # Rust formatting check
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        description: Check Rust code formatting
+        entry: cargo fmt
+        args: ['--', '--check']
+        language: system
+        types: [rust]
+        pass_filenames: false
+        # Fast: only checks formatting, doesn't modify files
+
+      # Rust linting with Clippy
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Run Clippy lints on Rust code
+        entry: cargo clippy
+        args:
+          - '--workspace'
+          - '--all-targets'
+          - '--all-features'
+          - '--'
+          - '-D'
+          - 'warnings'
+        language: system
+        types: [rust]
+        pass_filenames: false
+        # Moderate speed: runs Clippy checks
+
+      # Rust compilation check
+      - id: cargo-check
+        name: cargo check
+        description: Check Rust code compiles
+        entry: cargo check
+        args: ['--workspace', '--all-targets', '--all-features']
+        language: system
+        types: [rust]
+        pass_filenames: false
+        # Moderate speed: faster than full build
+        stages: [manual]  # Only run when explicitly requested (optional)
+
+  # Conventional commit message validation
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - --force-scope  # Optional: require scope like feat(ui): message
