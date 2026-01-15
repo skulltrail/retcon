@@ -196,6 +196,37 @@ impl Repository {
         let commit = head.peel_to_commit()?;
         Ok(CommitId(commit.id()))
     }
+
+    /// Stash uncommitted changes if any exist
+    ///
+    /// Returns true if changes were stashed, false if working tree was clean.
+    /// The stash is created with a special message to identify it as auto-created.
+    pub fn stash_changes(&mut self) -> Result<bool> {
+        if !self.has_uncommitted_changes()? {
+            return Ok(false);
+        }
+
+        // Get signature for stash
+        let signature = self.inner.signature()?;
+
+        // Create stash with a recognizable message
+        self.inner.stash_save(
+            &signature,
+            "retcon: auto-stash before history rewrite",
+            Some(git2::StashFlags::INCLUDE_UNTRACKED),
+        )?;
+
+        Ok(true)
+    }
+
+    /// Restore previously stashed changes
+    ///
+    /// This pops the most recent stash entry. Should only be called after
+    /// `stash_changes` returned true.
+    pub fn unstash_changes(&mut self) -> Result<()> {
+        self.inner.stash_pop(0, None)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
