@@ -478,7 +478,6 @@ impl AppState {
     }
 
     /// Move commit at cursor up (for reordering)
-    #[allow(dead_code)]
     pub fn move_commit_up(&mut self) {
         if self.cursor > 0 && self.filtered_indices.is_none() {
             self.save_undo("Reorder commits");
@@ -489,7 +488,6 @@ impl AppState {
     }
 
     /// Move commit at cursor down (for reordering)
-    #[allow(dead_code)]
     pub fn move_commit_down(&mut self) {
         if self.cursor < self.commits.len() - 1 && self.filtered_indices.is_none() {
             self.save_undo("Reorder commits");

@@ -6,9 +6,9 @@ use crate::state::{AppMode, AppState, ConfirmAction, VisualType};
 use crate::ui::layout::AppLayout;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::{
-    get_column_value, render_commit_table, render_confirmation_dialog, render_detail_pane,
-    render_edit_popup, render_help_screen, render_search_bar, render_status_bar, render_title_bar,
-    Column, ConfirmDialogState, SearchState,
+    get_column_value, help_max_scroll, render_commit_table, render_confirmation_dialog,
+    render_detail_pane, render_edit_popup, render_help_screen, render_search_bar,
+    render_status_bar, render_title_bar, Column, ConfirmDialogState, SearchState,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::CrosstermBackend;
@@ -30,6 +30,8 @@ pub struct App {
     search: SearchState,
     /// Confirmation dialog state
     confirm_dialog: ConfirmDialogState,
+    /// Last known terminal area (for scroll calculations)
+    last_area: ratatui::layout::Rect,
 }
 
 impl App {
@@ -39,7 +41,11 @@ impl App {
     /// * `repo` - The git repository to operate on
     /// * `commit_limit` - Maximum number of commits to load
     /// * `sync_author_to_committer` - Whether editing author fields should also update committer fields
-    pub fn new(repo: Repository, commit_limit: usize, sync_author_to_committer: bool) -> Result<Self> {
+    pub fn new(
+        repo: Repository,
+        commit_limit: usize,
+        sync_author_to_committer: bool,
+    ) -> Result<Self> {
         let branch_name = repo.current_branch_name()?;
         let has_upstream = repo.has_upstream().unwrap_or(false);
         let commits = repo.load_commits(commit_limit)?;
@@ -57,6 +63,7 @@ impl App {
             should_quit: false,
             search: SearchState::new(),
             confirm_dialog: ConfirmDialogState::default(),
+            last_area: ratatui::layout::Rect::default(),
         })
     }
 
@@ -87,6 +94,7 @@ impl App {
         use ratatui::widgets::Paragraph;
 
         let area = frame.area();
+        self.last_area = area;
 
         // Check if terminal is too small
         if AppLayout::is_too_small(area) {
@@ -145,7 +153,7 @@ impl App {
                 );
             }
             AppMode::Help => {
-                render_help_screen(frame, area, &self.theme);
+                render_help_screen(frame, area, self.state.help_scroll, &self.theme);
             }
             _ => {}
         }
@@ -234,6 +242,28 @@ impl App {
                 self.state.deselect_all();
             }
 
+            // Delete commit
+            (KeyCode::Char('d'), KeyModifiers::NONE) => {
+                self.toggle_deletion()?;
+            }
+            (KeyCode::Char('x'), KeyModifiers::NONE) => {
+                self.toggle_deletion()?;
+            }
+
+            // Move commit up/down (reorder)
+            (KeyCode::Char('K'), KeyModifiers::SHIFT) => {
+                self.move_commit_up()?;
+            }
+            (KeyCode::Char('J'), KeyModifiers::SHIFT) => {
+                self.move_commit_down()?;
+            }
+            (KeyCode::Char('k'), KeyModifiers::CONTROL) => {
+                self.move_commit_up()?;
+            }
+            (KeyCode::Char('j'), KeyModifiers::CONTROL) => {
+                self.move_commit_down()?;
+            }
+
             // Start inline editing with Enter or 'e'
             (KeyCode::Enter | KeyCode::Char('e'), KeyModifiers::NONE) => {
                 self.start_inline_editing()?;
@@ -281,6 +311,7 @@ impl App {
 
             // Help
             (KeyCode::Char('?'), KeyModifiers::NONE) => {
+                self.state.reset_help_scroll();
                 self.state.mode = AppMode::Help;
             }
 
@@ -457,6 +488,115 @@ impl App {
             }
 
             _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Move commit at cursor up (swap with previous)
+    fn move_commit_up(&mut self) -> Result<()> {
+        if self.state.filtered_indices.is_some() {
+            self.state.set_error("Cannot reorder while filtering");
+            return Ok(());
+        }
+
+        if self.state.cursor == 0 {
+            self.state.set_error("Already at top");
+            return Ok(());
+        }
+
+        // Check for merge commits - can't reorder them
+        if let Some(commit) = self.state.cursor_commit() {
+            if commit.is_merge {
+                self.state.set_error("Cannot reorder merge commits");
+                return Ok(());
+            }
+        }
+
+        // AppState.move_commit_up() handles save_undo internally
+        self.state.move_commit_up();
+        self.state.set_success("Commit moved up");
+        Ok(())
+    }
+
+    /// Move commit at cursor down (swap with next)
+    fn move_commit_down(&mut self) -> Result<()> {
+        if self.state.filtered_indices.is_some() {
+            self.state.set_error("Cannot reorder while filtering");
+            return Ok(());
+        }
+
+        if self.state.cursor >= self.state.commits.len().saturating_sub(1) {
+            self.state.set_error("Already at bottom");
+            return Ok(());
+        }
+
+        // Check for merge commits - can't reorder them
+        if let Some(commit) = self.state.cursor_commit() {
+            if commit.is_merge {
+                self.state.set_error("Cannot reorder merge commits");
+                return Ok(());
+            }
+        }
+
+        // AppState.move_commit_down() handles save_undo internally
+        self.state.move_commit_down();
+        self.state.set_success("Commit moved down");
+        Ok(())
+    }
+
+    /// Toggle deletion on the current commit or selected commits
+    fn toggle_deletion(&mut self) -> Result<()> {
+        // Get commits to potentially delete: selected > cursor
+        let commit_ids: Vec<CommitId> = if !self.state.selected.is_empty() {
+            self.state.selected.iter().copied().collect()
+        } else if let Some(id) = self.state.cursor_commit_id() {
+            vec![id]
+        } else {
+            return Ok(());
+        };
+
+        // Check if we're toggling on or off (based on first commit)
+        let will_delete = !self.state.is_deleted(commit_ids[0]);
+        let count = commit_ids.len();
+
+        // Don't allow deleting all commits
+        let remaining_after = self.state.commits.len() - self.state.deleted.len();
+        if will_delete && count >= remaining_after {
+            self.state.set_error("Cannot delete all commits");
+            return Ok(());
+        }
+
+        // Save undo state
+        let description = if will_delete {
+            format!("Delete {} commit(s)", count)
+        } else {
+            format!("Restore {} commit(s)", count)
+        };
+        self.state.save_undo(&description);
+
+        // Toggle deletion for all target commits
+        for id in commit_ids {
+            if will_delete {
+                self.state.mark_deleted(id);
+            } else {
+                self.state.unmark_deleted(id);
+            }
+        }
+
+        // Show feedback
+        if will_delete {
+            if count > 1 {
+                self.state
+                    .set_success(format!("{} commits marked for deletion", count));
+            } else {
+                self.state.set_success("Commit marked for deletion");
+            }
+        } else if count > 1 {
+            self.state
+                .set_success(format!("{} commits restored", count));
+        } else {
+            self.state.set_success("Commit restored");
         }
 
         Ok(())
@@ -1000,9 +1140,33 @@ impl App {
 
     /// Apply all pending changes to the git history
     fn apply_changes(&mut self) -> Result<()> {
-        // Ensure working tree is clean before rewriting
-        self.repo.validate_clean_for_rewrite()?;
+        // Auto-stash any uncommitted changes before rewriting
+        let stashed = self.repo.stash_changes()?;
 
+        // Perform the rewrite (with auto-restore on failure)
+        let result = self.apply_changes_inner();
+
+        // Restore stashed changes if we stashed them
+        if stashed {
+            // Try to restore even if rewrite failed
+            if let Err(e) = self.repo.unstash_changes() {
+                // If unstash fails after successful rewrite, warn but don't fail
+                if result.is_ok() {
+                    self.state.set_error(&format!(
+                        "Warning: Could not restore stashed changes: {}. Use 'git stash pop' manually.",
+                        e
+                    ));
+                    return Ok(());
+                }
+                // If both failed, return the original error
+            }
+        }
+
+        result
+    }
+
+    /// Inner implementation of apply_changes (separated for stash handling)
+    fn apply_changes_inner(&mut self) -> Result<()> {
         // Create backup reference
         self.repo.create_backup_ref(&self.state.branch_name)?;
 
@@ -1011,6 +1175,7 @@ impl App {
             self.repo.inner(),
             &self.state.commits,
             &self.state.modifications,
+            &self.state.deleted,
             &self.state.current_order,
             &self.state.branch_name,
         )?;
@@ -1033,10 +1198,46 @@ impl App {
 
     /// Handle key in help screen
     fn handle_help_key(&mut self, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+        let max_scroll = help_max_scroll(self.last_area);
+
+        match (key.code, key.modifiers) {
+            // Close help
+            (KeyCode::Esc, _) | (KeyCode::Char('q'), _) | (KeyCode::Char('?'), _) => {
                 self.state.mode = AppMode::Normal;
             }
+
+            // Scroll down
+            (KeyCode::Char('j') | KeyCode::Down, KeyModifiers::NONE) => {
+                self.state.help_scroll_down(1, max_scroll);
+            }
+
+            // Scroll up
+            (KeyCode::Char('k') | KeyCode::Up, KeyModifiers::NONE) => {
+                self.state.help_scroll_up(1);
+            }
+
+            // Page down
+            (KeyCode::Char('d'), KeyModifiers::CONTROL)
+            | (KeyCode::PageDown, _)
+            | (KeyCode::Char(' '), KeyModifiers::NONE) => {
+                self.state.help_scroll_down(10, max_scroll);
+            }
+
+            // Page up
+            (KeyCode::Char('u'), KeyModifiers::CONTROL) | (KeyCode::PageUp, _) => {
+                self.state.help_scroll_up(10);
+            }
+
+            // Go to top
+            (KeyCode::Char('g'), KeyModifiers::NONE) | (KeyCode::Home, _) => {
+                self.state.help_scroll = 0;
+            }
+
+            // Go to bottom
+            (KeyCode::Char('G'), KeyModifiers::NONE) | (KeyCode::End, _) => {
+                self.state.help_scroll = max_scroll;
+            }
+
             _ => {}
         }
 
