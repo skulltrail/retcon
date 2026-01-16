@@ -69,6 +69,9 @@ pub struct Theme {
     // Selection checkbox
     pub checkbox_checked: Style,
     pub checkbox_unchecked: Style,
+
+    // Deletion marker
+    pub deleted: Style,
 }
 
 impl Default for Theme {
@@ -155,6 +158,11 @@ impl Default for Theme {
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
             checkbox_unchecked: Style::default().fg(Color::DarkGray),
+
+            // Deletion marker - red and crossed out
+            deleted: Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD | Modifier::CROSSED_OUT),
         }
     }
 }

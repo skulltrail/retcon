@@ -55,6 +55,7 @@ pub enum ConfirmAction {
 pub struct UndoSnapshot {
     pub commit_order: Vec<CommitId>,
     pub modifications: HashMap<CommitId, CommitModifications>,
+    pub deleted: HashSet<CommitId>,
     pub description: String,
 }
 
@@ -74,6 +75,9 @@ pub struct AppState {
 
     /// Selected commits (for multi-select operations)
     pub selected: HashSet<CommitId>,
+
+    /// Commits marked for deletion
+    pub deleted: HashSet<CommitId>,
 
     /// Index of the cursor (focused commit in visible list)
     pub cursor: usize,
@@ -152,6 +156,7 @@ impl AppState {
             current_order,
             modifications: HashMap::new(),
             selected: HashSet::new(),
+            deleted: HashSet::new(),
             cursor: 0,
             mode: AppMode::Normal,
             search_query: String::new(),
@@ -342,6 +347,42 @@ impl AppState {
         self.selected.contains(&id)
     }
 
+    /// Check if a commit is marked for deletion
+    pub fn is_deleted(&self, id: CommitId) -> bool {
+        self.deleted.contains(&id)
+    }
+
+    /// Toggle deletion mark on commit at cursor
+    pub fn toggle_deletion(&mut self) {
+        if let Some(id) = self.cursor_commit_id() {
+            if self.deleted.contains(&id) {
+                self.deleted.remove(&id);
+            } else {
+                self.deleted.insert(id);
+            }
+        }
+    }
+
+    /// Mark a specific commit for deletion
+    pub fn mark_deleted(&mut self, id: CommitId) {
+        self.deleted.insert(id);
+    }
+
+    /// Unmark a commit from deletion
+    pub fn unmark_deleted(&mut self, id: CommitId) {
+        self.deleted.remove(&id);
+    }
+
+    /// Get count of deleted commits
+    pub fn deleted_count(&self) -> usize {
+        self.deleted.len()
+    }
+
+    /// Clear all deletion marks
+    pub fn clear_deletions(&mut self) {
+        self.deleted.clear();
+    }
+
     /// Toggle selection of the commit at cursor
     pub fn toggle_selection(&mut self) {
         if let Some(id) = self.cursor_commit_id() {
@@ -499,6 +540,7 @@ impl AppState {
         let snapshot = UndoSnapshot {
             commit_order: self.current_order.clone(),
             modifications: self.modifications.clone(),
+            deleted: self.deleted.clone(),
             description: description.to_string(),
         };
         self.undo_stack.push(snapshot);
@@ -512,6 +554,7 @@ impl AppState {
             let current = UndoSnapshot {
                 commit_order: self.current_order.clone(),
                 modifications: self.modifications.clone(),
+                deleted: self.deleted.clone(),
                 description: snapshot.description.clone(),
             };
             self.redo_stack.push(current);
@@ -519,6 +562,7 @@ impl AppState {
             // Restore from snapshot
             self.current_order = snapshot.commit_order;
             self.modifications = snapshot.modifications;
+            self.deleted = snapshot.deleted;
 
             // Rebuild commits array in new order
             self.rebuild_commits_order();
@@ -536,6 +580,7 @@ impl AppState {
             let current = UndoSnapshot {
                 commit_order: self.current_order.clone(),
                 modifications: self.modifications.clone(),
+                deleted: self.deleted.clone(),
                 description: snapshot.description.clone(),
             };
             self.undo_stack.push(current);
@@ -543,6 +588,7 @@ impl AppState {
             // Restore from snapshot
             self.current_order = snapshot.commit_order;
             self.modifications = snapshot.modifications;
+            self.deleted = snapshot.deleted;
 
             // Rebuild commits array in new order
             self.rebuild_commits_order();
@@ -571,6 +617,10 @@ impl AppState {
         if self.modifications.values().any(|m| m.has_modifications()) {
             return true;
         }
+        // Check for deletions
+        if !self.deleted.is_empty() {
+            return true;
+        }
         // Check for reordering
         if self.current_order != self.original_order {
             return true;
@@ -589,6 +639,7 @@ impl AppState {
     /// Clear all modifications
     pub fn clear_modifications(&mut self) {
         self.modifications.clear();
+        self.deleted.clear();
         self.current_order = self.original_order.clone();
         self.rebuild_commits_order();
         self.undo_stack.clear();

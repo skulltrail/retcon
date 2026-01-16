@@ -2,17 +2,20 @@ use crate::error::{HistError, Result};
 use crate::git::commit::{CommitData, CommitId, CommitModifications};
 use chrono::{DateTime, FixedOffset};
 use git2::{Repository as Git2Repository, Signature, Time};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-/// Rewrite git history with the specified modifications
+/// Rewrite git history with the specified modifications and deletions
 ///
 /// This function rewrites commits from oldest to newest, creating new commits
 /// with the modified metadata while preserving the tree (file contents).
+/// Deleted commits are skipped and their children are reparented to the
+/// deleted commit's parent(s).
 ///
 /// # Arguments
 /// * `repo` - The git repository
 /// * `commits` - List of commits in display order (newest first)
 /// * `modifications` - Map of commit ID to modifications
+/// * `deleted` - Set of commit IDs to delete
 /// * `new_order` - New order of commits (for reordering support)
 /// * `branch_name` - Name of the branch to update
 ///
@@ -23,17 +26,35 @@ pub fn rewrite_history(
     repo: &Git2Repository,
     commits: &[CommitData],
     modifications: &HashMap<CommitId, CommitModifications>,
+    deleted: &HashSet<CommitId>,
     new_order: &[CommitId],
     branch_name: &str,
 ) -> Result<()> {
     // Build a lookup map for commits by ID
     let commit_lookup: HashMap<CommitId, &CommitData> = commits.iter().map(|c| (c.id, c)).collect();
 
-    // Map from old commit OID to new commit OID
+    // Map from old commit OID to new commit OID (or to parent OID if deleted)
     let mut commit_map: HashMap<git2::Oid, git2::Oid> = HashMap::new();
+
+    // Build a map of deleted commits to their parents for reparenting
+    // When a commit is deleted, its children should be reparented to the deleted commit's parent
+    let mut deleted_parent_map: HashMap<git2::Oid, Vec<git2::Oid>> = HashMap::new();
+    for commit_id in deleted.iter() {
+        if let Some(original) = commit_lookup.get(commit_id) {
+            deleted_parent_map.insert(
+                original.id.0,
+                original.parent_ids.iter().map(|p| p.0).collect(),
+            );
+        }
+    }
 
     // Process commits from oldest to newest (reverse of display order)
     for commit_id in new_order.iter().rev() {
+        // Skip deleted commits
+        if deleted.contains(commit_id) {
+            continue;
+        }
+
         let original = commit_lookup
             .get(commit_id)
             .ok_or_else(|| HistError::CommitNotFound(commit_id.to_string()))?;
@@ -41,10 +62,21 @@ pub fn rewrite_history(
         let mods = modifications.get(commit_id);
 
         // Get parent commits, translating through commit_map if they were rewritten
+        // If a parent was deleted, use its parents instead (reparenting)
         let parent_oids: Vec<git2::Oid> = original
             .parent_ids
             .iter()
-            .map(|p| *commit_map.get(&p.0).unwrap_or(&p.0))
+            .flat_map(|p| {
+                // If the parent was deleted, use its parents
+                if let Some(grandparents) = deleted_parent_map.get(&p.0) {
+                    grandparents
+                        .iter()
+                        .map(|gp| *commit_map.get(gp).unwrap_or(gp))
+                        .collect()
+                } else {
+                    vec![*commit_map.get(&p.0).unwrap_or(&p.0)]
+                }
+            })
             .collect();
 
         let parents: Vec<git2::Commit<'_>> = parent_oids
@@ -55,11 +87,16 @@ pub fn rewrite_history(
         let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
 
         // Build author signature
+        let new_author_name = mods
+            .and_then(|m| m.author_name.as_deref())
+            .unwrap_or(&original.author.name);
+        let new_author_email = mods
+            .and_then(|m| m.author_email.as_deref())
+            .unwrap_or(&original.author.email);
+
         let author = build_signature(
-            mods.and_then(|m| m.author_name.as_deref())
-                .unwrap_or(&original.author.name),
-            mods.and_then(|m| m.author_email.as_deref())
-                .unwrap_or(&original.author.email),
+            new_author_name,
+            new_author_email,
             mods.and_then(|m| m.author_date)
                 .unwrap_or(original.author_date),
         )?;
@@ -97,9 +134,11 @@ pub fn rewrite_history(
     }
 
     // Update the branch reference to point to the new HEAD
+    // Find the first non-deleted commit in new_order
     let newest_commit_id = new_order
-        .first()
-        .ok_or_else(|| HistError::RewriteFailed("No commits to rewrite".to_string()))?;
+        .iter()
+        .find(|id| !deleted.contains(id))
+        .ok_or_else(|| HistError::RewriteFailed("All commits would be deleted".to_string()))?;
 
     let new_head_oid = commit_map
         .get(&newest_commit_id.0)
@@ -113,13 +152,6 @@ pub fn rewrite_history(
         true, // Force update
         "retcon: rewrite history",
     )?;
-
-    // Also update HEAD if it's pointing to this branch
-    if let Ok(head) = repo.head() {
-        if head.is_branch() && head.shorthand() == Some(branch_name) {
-            // HEAD will automatically follow the branch
-        }
-    }
 
     Ok(())
 }
@@ -169,10 +201,16 @@ pub fn count_modified_commits(modifications: &HashMap<CommitId, CommitModificati
 pub fn generate_change_summary(
     commits: &[CommitData],
     modifications: &HashMap<CommitId, CommitModifications>,
+    deleted: &HashSet<CommitId>,
     original_order: &[CommitId],
     new_order: &[CommitId],
 ) -> Vec<String> {
     let mut summary = Vec::new();
+
+    // Count deleted commits
+    if !deleted.is_empty() {
+        summary.push(format!("{} commit(s) will be deleted", deleted.len()));
+    }
 
     // Count modified commits
     let modified_count = count_modified_commits(modifications);
@@ -251,8 +289,10 @@ mod tests {
     #[test]
     fn test_count_modified_commits() {
         let mut mods: HashMap<CommitId, CommitModifications> = HashMap::new();
-        let id1 = CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
-        let id2 = CommitId(git2::Oid::from_str("2222222222222222222222222222222222222222").unwrap());
+        let id1 =
+            CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
+        let id2 =
+            CommitId(git2::Oid::from_str("2222222222222222222222222222222222222222").unwrap());
 
         // No modifications
         assert_eq!(count_modified_commits(&mods), 0);
@@ -278,10 +318,11 @@ mod tests {
     fn test_generate_change_summary_no_changes() {
         let commits = vec![];
         let mods: HashMap<CommitId, CommitModifications> = HashMap::new();
+        let deleted: HashSet<CommitId> = HashSet::new();
         let order1 = vec![];
         let order2 = vec![];
 
-        let summary = generate_change_summary(&commits, &mods, &order1, &order2);
+        let summary = generate_change_summary(&commits, &mods, &deleted, &order1, &order2);
         assert!(summary.is_empty());
     }
 
@@ -292,7 +333,8 @@ mod tests {
         let utc = FixedOffset::east_opt(0).unwrap();
         let dt = utc.with_ymd_and_hms(2024, 1, 15, 14, 30, 0).unwrap();
 
-        let id1 = CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
+        let id1 =
+            CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
         let commit = crate::git::commit::CommitData {
             id: id1,
             short_hash: "1111111".to_string(),
@@ -312,8 +354,9 @@ mod tests {
         mod1.author_name = Some("New Author".to_string());
         mod1.author_email = Some("new@example.com".to_string());
         mods.insert(id1, mod1);
+        let deleted: HashSet<CommitId> = HashSet::new();
 
-        let summary = generate_change_summary(&[commit], &mods, &[id1], &[id1]);
+        let summary = generate_change_summary(&[commit], &mods, &deleted, &[id1], &[id1]);
 
         assert!(summary.len() >= 2);
         assert!(summary[0].contains("1 commit(s) with modified metadata"));
@@ -324,15 +367,19 @@ mod tests {
 
     #[test]
     fn test_generate_change_summary_with_reorder() {
-        let id1 = CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
-        let id2 = CommitId(git2::Oid::from_str("2222222222222222222222222222222222222222").unwrap());
+        let id1 =
+            CommitId(git2::Oid::from_str("1111111111111111111111111111111111111111").unwrap());
+        let id2 =
+            CommitId(git2::Oid::from_str("2222222222222222222222222222222222222222").unwrap());
 
         let commits = vec![];
         let mods: HashMap<CommitId, CommitModifications> = HashMap::new();
+        let deleted: HashSet<CommitId> = HashSet::new();
         let original_order = vec![id1, id2];
         let new_order = vec![id2, id1];
 
-        let summary = generate_change_summary(&commits, &mods, &original_order, &new_order);
+        let summary =
+            generate_change_summary(&commits, &mods, &deleted, &original_order, &new_order);
 
         assert_eq!(summary.len(), 1);
         assert!(summary[0].contains("Commit order has been changed"));
@@ -360,7 +407,8 @@ mod tests {
                     message: format!("Commit {}", i),
                     summary: format!("Commit {}", i),
                     parent_ids: vec![],
-                    tree_id: git2::Oid::from_str("abcdef1234567890abcdef1234567890abcdef12").unwrap(),
+                    tree_id: git2::Oid::from_str("abcdef1234567890abcdef1234567890abcdef12")
+                        .unwrap(),
                     is_merge: false,
                 }
             })
@@ -373,9 +421,10 @@ mod tests {
             mod1.message = Some("Modified".to_string());
             mods.insert(commit.id, mod1);
         }
+        let deleted: HashSet<CommitId> = HashSet::new();
 
         let order: Vec<_> = commits.iter().map(|c| c.id).collect();
-        let summary = generate_change_summary(&commits, &mods, &order, &order);
+        let summary = generate_change_summary(&commits, &mods, &deleted, &order, &order);
 
         // Should show first 5 and then "... and X more"
         assert!(summary.iter().any(|s| s.contains("... and 5 more")));

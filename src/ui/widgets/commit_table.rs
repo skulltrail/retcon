@@ -102,6 +102,7 @@ struct RowContext<'a> {
     cursor_row: usize,
     cursor_col: usize,
     is_selected: bool,
+    is_deleted: bool,
     is_editing: bool,
     visual_selection: Option<VisualSelection>,
     mods: Option<&'a CommitModifications>,
@@ -178,6 +179,7 @@ pub fn render_commit_table(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
                 cursor_row: state.cursor,
                 cursor_col: state.column_index,
                 is_selected: state.is_selected(commit.id),
+                is_deleted: state.is_deleted(commit.id),
                 is_editing: editing_row == Some(idx),
                 visual_selection: visual_selection.as_ref().map(|v| VisualSelection {
                     visual_type: v.visual_type,
@@ -231,8 +233,15 @@ pub fn render_commit_table(frame: &mut Frame<'_>, area: Rect, state: &AppState, 
 }
 
 fn build_title(state: &AppState, visible: &[&CommitData]) -> String {
-    if state.is_dirty() {
-        format!(" Commits ({} modified) ", state.modified_count())
+    let modified = state.modified_count();
+    let deleted = state.deleted_count();
+
+    if deleted > 0 && modified > 0 {
+        format!(" Commits ({} modified, {} deleted) ", modified, deleted)
+    } else if deleted > 0 {
+        format!(" Commits ({} deleted) ", deleted)
+    } else if modified > 0 {
+        format!(" Commits ({} modified) ", modified)
     } else {
         format!(" Commits ({}) ", visible.len())
     }
@@ -242,17 +251,26 @@ fn build_title(state: &AppState, visible: &[&CommitData]) -> String {
 fn create_row<'a>(commit: &CommitData, ctx: &RowContext<'a>) -> Row<'a> {
     let is_cursor_row = ctx.row_idx == ctx.cursor_row;
 
-    // Selection checkbox
-    let checkbox_text = if ctx.is_selected { "[x]" } else { "[ ]" };
+    // Selection checkbox - show 'D' for deleted, 'x' for selected
+    let checkbox_text = if ctx.is_deleted {
+        "[D]"
+    } else if ctx.is_selected {
+        "[x]"
+    } else {
+        "[ ]"
+    };
+    let checkbox_base_style = if ctx.is_deleted {
+        ctx.theme.deleted
+    } else if ctx.is_selected {
+        ctx.theme.checkbox_checked
+    } else {
+        ctx.theme.checkbox_unchecked
+    };
     let checkbox_style = cell_style(
         ctx,
         Column::Selection as usize,
         false, // checkbox not modifiable
-        if ctx.is_selected {
-            ctx.theme.checkbox_checked
-        } else {
-            ctx.theme.checkbox_unchecked
-        },
+        checkbox_base_style,
     );
     let checkbox = Cell::from(Span::styled(checkbox_text, checkbox_style));
 

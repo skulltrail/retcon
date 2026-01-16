@@ -119,6 +119,7 @@ fn build_dialog_content(
             let summary = generate_change_summary(
                 &state.commits,
                 &state.modifications,
+                &state.deleted,
                 &state.original_order,
                 &state.current_order,
             );
@@ -137,8 +138,16 @@ fn build_dialog_content(
 
         ConfirmAction::DiscardChanges => {
             let title = "Discard Changes".to_string();
+            let modified = state.modified_count();
+            let deleted = state.deleted_count();
+            let change_desc = match (modified > 0, deleted > 0) {
+                (true, true) => format!("{} modified and {} deleted commit(s)", modified, deleted),
+                (true, false) => format!("{} modified commit(s)", modified),
+                (false, true) => format!("{} commit(s) marked for deletion", deleted),
+                (false, false) => "changes".to_string(),
+            };
             let content = vec![
-                format!("You have {} modified commit(s).", state.modified_count()),
+                format!("You have {}.", change_desc),
                 "".to_string(),
                 "Are you sure you want to discard all changes?".to_string(),
             ];
@@ -147,8 +156,11 @@ fn build_dialog_content(
 
         ConfirmAction::QuitWithChanges => {
             let title = "Quit with Changes".to_string();
+            let modified = state.modified_count();
+            let deleted = state.deleted_count();
+            let total = modified + deleted;
             let content = vec![
-                format!("You have {} unsaved change(s).", state.modified_count()),
+                format!("You have {} unsaved change(s).", total),
                 "".to_string(),
                 "Are you sure you want to quit?".to_string(),
             ];
