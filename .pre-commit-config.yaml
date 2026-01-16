@@ -38,8 +38,9 @@ repos:
       - id: check-case-conflict
 
       # Prevent committing directly to main/master
-      - id: no-commit-to-branch
-        args: ['--branch', 'main', '--branch', 'master']
+      # Temporarily disabled for early development
+      # - id: no-commit-to-branch
+      #   args: ['--branch', 'main', '--branch', 'master']
 
   # Rust formatting check
   - repo: local
