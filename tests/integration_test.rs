@@ -1,12 +1,12 @@
+#![allow(clippy::unwrap_used)]
+
 use retcon::{git::Repository, state::app_state::AppState, Result};
 use serial_test::serial;
 use std::fs;
 use std::path::PathBuf;
 
 /// Helper to create a test git repository with multiple commits
-fn create_test_repo_with_commits(
-    commits: &[(&str, &str)],
-) -> (tempfile::TempDir, PathBuf) {
+fn create_test_repo_with_commits(commits: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let temp_dir = tempfile::tempdir().unwrap();
     let repo_path = temp_dir.path().to_path_buf();
 
@@ -23,7 +23,7 @@ fn create_test_repo_with_commits(
 
     for (i, (filename, message)) in commits.iter().enumerate() {
         let file_path = repo_path.join(filename);
-        fs::write(&file_path, format!("Content {}", i)).unwrap();
+        fs::write(&file_path, format!("Content {i}")).unwrap();
 
         let mut index = repo.index().unwrap();
         index.add_path(std::path::Path::new(filename)).unwrap();
@@ -102,14 +102,11 @@ fn test_app_state_workflow() -> Result<()> {
 #[test]
 #[serial]
 fn test_commit_rewriting() -> Result<()> {
-    use retcon::git::commit::CommitModifications;
+    use retcon::git::commit::{CommitId, CommitModifications};
     use retcon::git::rewrite::rewrite_history;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
-    let commits_data = vec![
-        ("file1.txt", "First"),
-        ("file2.txt", "Second"),
-    ];
+    let commits_data = vec![("file1.txt", "First"), ("file2.txt", "Second")];
 
     let (_temp_dir, repo_path) = create_test_repo_with_commits(&commits_data);
     let repo = Repository::open(&repo_path)?;
@@ -118,10 +115,15 @@ fn test_commit_rewriting() -> Result<()> {
 
     // Create modifications for the first commit
     let mut modifications = HashMap::new();
-    let mut mod1 = CommitModifications::default();
-    mod1.author_name = Some("Modified Author".to_string());
-    mod1.message = Some("Modified message".to_string());
+    let mod1 = CommitModifications {
+        author_name: Some("Modified Author".to_string()),
+        message: Some("Modified message".to_string()),
+        ..Default::default()
+    };
     modifications.insert(commits[0].id, mod1);
+
+    // No deletions
+    let deleted: HashSet<CommitId> = HashSet::new();
 
     // Get the current order
     let current_order: Vec<_> = commits.iter().map(|c| c.id).collect();
@@ -131,6 +133,7 @@ fn test_commit_rewriting() -> Result<()> {
         repo.inner(),
         &commits,
         &modifications,
+        &deleted,
         &current_order,
         &branch_name,
     )?;
@@ -283,16 +286,14 @@ fn test_backup_ref_creation() -> Result<()> {
 
     // Verify backup exists
     let git_repo = repo.inner();
-    assert!(git_repo
-        .find_reference("refs/original/heads/main")
-        .is_ok());
+    assert!(git_repo.find_reference("refs/original/heads/main").is_ok());
 
     Ok(())
 }
 
 #[test]
 #[serial]
-fn test_dirty_working_tree_detection() {
+fn test_dirty_working_tree_handling() {
     let commits_data = vec![("file1.txt", "First")];
 
     let (_temp_dir, repo_path) = create_test_repo_with_commits(&commits_data);
@@ -301,9 +302,21 @@ fn test_dirty_working_tree_detection() {
     let file_path = repo_path.join("file1.txt");
     fs::write(&file_path, "Modified content").unwrap();
 
-    // Should fail to open due to dirty working tree
-    let result = Repository::open(&repo_path);
-    assert!(result.is_err());
+    // Opening should succeed - dirty tree only blocks rewrite, not browsing
+    let mut repo = Repository::open(&repo_path).unwrap();
+    assert!(repo.has_uncommitted_changes().unwrap());
+
+    // Stash and unstash should work correctly
+    let stashed = repo.stash_changes().unwrap();
+    assert!(stashed);
+    assert!(!repo.has_uncommitted_changes().unwrap());
+
+    repo.unstash_changes().unwrap();
+    assert!(repo.has_uncommitted_changes().unwrap());
+
+    // Verify content was preserved
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(content, "Modified content");
 }
 
 #[test]

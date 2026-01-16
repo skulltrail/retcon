@@ -14,10 +14,10 @@ pub use error::{HistError, Result};
 pub use git::Repository;
 
 use clap::Parser;
-use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::execute;
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -59,13 +59,13 @@ pub fn main() {
     let args = Args::parse();
 
     // Run the app
-    if let Err(e) = run(args) {
-        eprintln!("Error: {}", e);
+    if let Err(e) = run(&args) {
+        eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(args: Args) -> Result<()> {
+fn run(args: &Args) -> Result<()> {
     // Open repository
     let repo = match &args.path {
         Some(path) => Repository::open(path)?,

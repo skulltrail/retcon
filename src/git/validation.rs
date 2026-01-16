@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+
 use crate::error::{HistError, Result};
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone};
 
@@ -42,24 +44,31 @@ pub fn validate_date(date_str: &str) -> Result<DateTime<FixedOffset>> {
         return Ok(dt);
     }
 
+    // UTC (offset 0) is always valid - this cannot fail
+    #[allow(clippy::expect_used)]
+    let utc = FixedOffset::east_opt(0).expect("UTC offset is always valid");
+
     // Try without timezone (assume UTC)
     if let Ok(naive) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S") {
-        let utc = FixedOffset::east_opt(0).unwrap();
-        return Ok(utc.from_local_datetime(&naive).unwrap());
+        if let Some(dt) = utc.from_local_datetime(&naive).single() {
+            return Ok(dt);
+        }
     }
 
     // Try without seconds
     if let Ok(naive) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M") {
-        let utc = FixedOffset::east_opt(0).unwrap();
-        return Ok(utc.from_local_datetime(&naive).unwrap());
+        if let Some(dt) = utc.from_local_datetime(&naive).single() {
+            return Ok(dt);
+        }
     }
 
     // Try date only (midnight UTC)
     if let Ok(naive) =
-        NaiveDateTime::parse_from_str(&format!("{} 00:00:00", date_str), "%Y-%m-%d %H:%M:%S")
+        NaiveDateTime::parse_from_str(&format!("{date_str} 00:00:00"), "%Y-%m-%d %H:%M:%S")
     {
-        let utc = FixedOffset::east_opt(0).unwrap();
-        return Ok(utc.from_local_datetime(&naive).unwrap());
+        if let Some(dt) = utc.from_local_datetime(&naive).single() {
+            return Ok(dt);
+        }
     }
 
     Err(HistError::InvalidDate(date_str.to_string()))
@@ -67,11 +76,13 @@ pub fn validate_date(date_str: &str) -> Result<DateTime<FixedOffset>> {
 
 /// Format a date for editing (reversible format)
 #[allow(dead_code)]
+#[must_use]
 pub fn format_date_for_edit(dt: &DateTime<FixedOffset>) -> String {
     dt.format("%Y-%m-%d %H:%M:%S %z").to_string()
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use chrono::Timelike;

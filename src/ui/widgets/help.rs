@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
+
 use crate::ui::layout::HelpLayout;
 use crate::ui::theme::Theme;
 use ratatui::layout::Rect;
@@ -6,6 +8,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 /// Get the total number of lines in the help text
+#[must_use]
 pub fn help_content_height() -> usize {
     // This should match the number of lines in build_help_text
     // We return a constant here to avoid rebuilding the text just to count
@@ -48,12 +51,14 @@ pub fn render_help_screen(frame: &mut Frame<'_>, area: Rect, scroll: usize, them
 }
 
 /// Calculate the maximum scroll offset for the help screen
+#[must_use]
 pub fn help_max_scroll(area: Rect) -> usize {
     let layout = HelpLayout::fullscreen(area);
     let visible_height = layout.outer.height.saturating_sub(2) as usize;
     help_content_height().saturating_sub(visible_height)
 }
 
+#[allow(clippy::vec_init_then_push)]
 fn build_help_text(theme: &Theme) -> Vec<Line<'static>> {
     let title_style = theme.title;
     let key_style = theme.keybinding_key;
@@ -252,7 +257,7 @@ fn key_line(
 ) -> Line<'static> {
     Line::from(vec![
         Span::raw("  "),
-        Span::styled(format!("{:12}", key), key_style),
+        Span::styled(format!("{key:12}"), key_style),
         Span::raw(desc),
     ])
 }

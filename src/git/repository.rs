@@ -1,15 +1,20 @@
+#![allow(clippy::missing_errors_doc)]
+
 use crate::error::{HistError, Result};
 use crate::git::commit::{CommitData, CommitId};
 use git2::{Repository as Git2Repository, RepositoryState, StatusOptions};
 use std::path::Path;
 
-/// Wrapper around git2::Repository with convenience methods for retcon
+/// Wrapper around `git2::Repository` with convenience methods for retcon
 pub struct Repository {
     inner: Git2Repository,
 }
 
 impl Repository {
     /// Open a repository at the given path
+    ///
+    /// # Errors
+    /// Returns an error if the path is not a git repository or the repository is in an invalid state.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let inner = Git2Repository::discover(path)
@@ -161,6 +166,7 @@ impl Repository {
     }
 
     /// Get the inner git2 repository (for rewriting operations)
+    #[must_use]
     pub fn inner(&self) -> &Git2Repository {
         &self.inner
     }
@@ -176,7 +182,7 @@ impl Repository {
         let head = self.inner.head()?;
         let commit = head.peel_to_commit()?;
 
-        let backup_ref = format!("refs/original/heads/{}", branch_name);
+        let backup_ref = format!("refs/original/heads/{branch_name}");
         self.inner
             .reference(
                 &backup_ref,
@@ -230,6 +236,7 @@ impl Repository {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use serial_test::serial;
@@ -259,8 +266,7 @@ mod tests {
             fs::write(&file_path, "test content").unwrap();
             index.add_path(std::path::Path::new("test.txt")).unwrap();
             index.write().unwrap();
-            let tree_id = index.write_tree().unwrap();
-            tree_id
+            index.write_tree().unwrap()
         };
         let tree = repo.find_tree(tree_id).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
@@ -277,15 +283,8 @@ mod tests {
         };
         let tree = repo.find_tree(tree_id).unwrap();
         let parent = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "Second commit",
-            &tree,
-            &[&parent],
-        )
-        .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Second commit", &tree, &[&parent])
+            .unwrap();
 
         (temp_dir, repo_path)
     }
@@ -488,5 +487,44 @@ mod tests {
 
         let inner = repo.inner();
         assert!(!inner.is_bare());
+    }
+
+    #[test]
+    #[serial]
+    fn test_stash_changes_clean_tree() {
+        let (_temp_dir, repo_path) = create_test_repo();
+        let mut repo = Repository::open(&repo_path).unwrap();
+
+        // Clean tree should not stash anything
+        let stashed = repo.stash_changes().unwrap();
+        assert!(!stashed);
+    }
+
+    #[test]
+    #[serial]
+    fn test_stash_and_unstash_changes() {
+        let (_temp_dir, repo_path) = create_test_repo();
+
+        // Create a modified file
+        let file_path = repo_path.join("test.txt");
+        fs::write(&file_path, "modified content").unwrap();
+
+        let mut repo = Repository::open(&repo_path).unwrap();
+        assert!(repo.has_uncommitted_changes().unwrap());
+
+        // Stash changes
+        let stashed = repo.stash_changes().unwrap();
+        assert!(stashed);
+
+        // Working tree should now be clean
+        assert!(!repo.has_uncommitted_changes().unwrap());
+
+        // Unstash should restore changes
+        repo.unstash_changes().unwrap();
+        assert!(repo.has_uncommitted_changes().unwrap());
+
+        // File should have modified content
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "modified content");
     }
 }

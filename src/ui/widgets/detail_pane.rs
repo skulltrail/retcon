@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::git::commit::{CommitData, CommitModifications};
 use crate::state::AppState;
 use crate::ui::theme::Theme;
@@ -10,17 +12,14 @@ use ratatui::Frame;
 
 /// Render the commit detail pane
 pub fn render_detail_pane(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme) {
-    let commit = match state.cursor_commit() {
-        Some(c) => c,
-        None => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(theme.border)
-                .title(Line::from(" Commit Details ").style(theme.title));
-            let para = Paragraph::new("No commit selected").block(block);
-            frame.render_widget(para, area);
-            return;
-        }
+    let Some(commit) = state.cursor_commit() else {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme.border)
+            .title(Line::from(" Commit Details ").style(theme.title));
+        let para = Paragraph::new("No commit selected").block(block);
+        frame.render_widget(para, area);
+        return;
     };
 
     let mods = state.modifications.get(&commit.id);
@@ -103,10 +102,10 @@ fn build_detail_lines<'a>(
 
     // Author date
     let author_date_mod = mods.and_then(|m| m.author_date).is_some();
-    let author_date = mods
-        .and_then(|m| m.author_date)
-        .map(|d| d.format("%Y-%m-%d %H:%M:%S %z").to_string())
-        .unwrap_or_else(|| commit.format_author_date_full());
+    let author_date = mods.and_then(|m| m.author_date).map_or_else(
+        || commit.format_author_date_full(),
+        |d| d.format("%Y-%m-%d %H:%M:%S %z").to_string(),
+    );
 
     lines.push(Line::from(vec![
         Span::styled("A. Date:   ", theme.info),
@@ -139,10 +138,10 @@ fn build_detail_lines<'a>(
 
     // Committer date
     let committer_date_mod = mods.and_then(|m| m.committer_date).is_some();
-    let committer_date = mods
-        .and_then(|m| m.committer_date)
-        .map(|d| d.format("%Y-%m-%d %H:%M:%S %z").to_string())
-        .unwrap_or_else(|| commit.format_committer_date_full());
+    let committer_date = mods.and_then(|m| m.committer_date).map_or_else(
+        || commit.format_committer_date_full(),
+        |d| d.format("%Y-%m-%d %H:%M:%S %z").to_string(),
+    );
 
     lines.push(Line::from(vec![
         Span::styled("C. Date:   ", theme.info),
@@ -157,7 +156,7 @@ fn build_detail_lines<'a>(
         let parent_str = commit
             .parent_ids
             .iter()
-            .map(|p| p.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join(", ");
         lines.push(Line::from(vec![
