@@ -248,8 +248,10 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let repo_path = temp_dir.path().to_path_buf();
 
-        // Initialize repository
-        let repo = Git2Repository::init(&repo_path).unwrap();
+        // Initialize repository with explicit "main" branch name
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        let repo = Git2Repository::init_opts(&repo_path, &opts).unwrap();
 
         // Configure user for commits
         let mut config = repo.config().unwrap();
