@@ -26,7 +26,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tui-textarea = { version = "0.7", default-features = false, features = ["crossterm"] }
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Serialization (for undo/redo state)
