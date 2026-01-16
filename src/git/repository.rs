@@ -277,15 +277,8 @@ mod tests {
         };
         let tree = repo.find_tree(tree_id).unwrap();
         let parent = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "Second commit",
-            &tree,
-            &[&parent],
-        )
-        .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Second commit", &tree, &[&parent])
+            .unwrap();
 
         (temp_dir, repo_path)
     }
@@ -488,5 +481,44 @@ mod tests {
 
         let inner = repo.inner();
         assert!(!inner.is_bare());
+    }
+
+    #[test]
+    #[serial]
+    fn test_stash_changes_clean_tree() {
+        let (_temp_dir, repo_path) = create_test_repo();
+        let mut repo = Repository::open(&repo_path).unwrap();
+
+        // Clean tree should not stash anything
+        let stashed = repo.stash_changes().unwrap();
+        assert!(!stashed);
+    }
+
+    #[test]
+    #[serial]
+    fn test_stash_and_unstash_changes() {
+        let (_temp_dir, repo_path) = create_test_repo();
+
+        // Create a modified file
+        let file_path = repo_path.join("test.txt");
+        fs::write(&file_path, "modified content").unwrap();
+
+        let mut repo = Repository::open(&repo_path).unwrap();
+        assert!(repo.has_uncommitted_changes().unwrap());
+
+        // Stash changes
+        let stashed = repo.stash_changes().unwrap();
+        assert!(stashed);
+
+        // Working tree should now be clean
+        assert!(!repo.has_uncommitted_changes().unwrap());
+
+        // Unstash should restore changes
+        repo.unstash_changes().unwrap();
+        assert!(repo.has_uncommitted_changes().unwrap());
+
+        // File should have modified content
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "modified content");
     }
 }
