@@ -1,0 +1,201 @@
+name: Auto Release
+
+# Automatically version bump based on conventional commits and trigger release
+# Only runs AFTER CI workflow completes successfully
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version-bump:
+    name: Analyze & Version Bump
+    runs-on: ubuntu-latest
+    # Only run if CI succeeded and it was on main branch
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0  # Full history for commit analysis
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if version bump commit
+        id: check_skip
+        run: |
+          # Get the commit message for the triggering commit
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" ${{ github.event.workflow_run.head_sha }})
+          echo "Commit message: $COMMIT_MSG"
+
+          if [[ "$COMMIT_MSG" == chore\(release\):* ]] || [[ "$COMMIT_MSG" == *"[skip ci]"* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping - this is a version bump or skip ci commit"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure git
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get latest tag
+        id: latest_tag
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest tag: $LATEST_TAG"
+
+      - name: Analyze commits for version bump
+        id: version_bump
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          LATEST_TAG="${{ steps.latest_tag.outputs.tag }}"
+
+          # Get commits since last tag (or all commits if no tag exists)
+          if [ "$LATEST_TAG" = "v0.0.0" ]; then
+            COMMITS=$(git log --oneline --pretty=format:"%s" 2>/dev/null || echo "")
+          else
+            COMMITS=$(git log "${LATEST_TAG}..HEAD" --oneline --pretty=format:"%s" 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "No new commits since last tag"
+            echo "bump=none" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Commits since $LATEST_TAG:"
+          echo "$COMMITS"
+          echo ""
+
+          # Determine bump type based on conventional commits
+          # Priority: major > minor > patch
+          BUMP="none"
+
+          # Check for breaking changes:
+          # - Type with ! suffix: feat!, fix!, refactor!, etc.
+          if echo "$COMMITS" | grep -qE "^[a-z]+(\([^)]+\))?!:"; then
+            BUMP="major"
+            echo "Found breaking change (! suffix) - major bump"
+          # Check for features
+          elif echo "$COMMITS" | grep -qE "^feat(\([^)]+\))?:"; then
+            BUMP="minor"
+            echo "Found feature commit - minor bump"
+          # Check for fixes, chores, docs, build, refactor, style, test, perf, ci
+          elif echo "$COMMITS" | grep -qE "^(fix|chore|docs|build|refactor|style|test|perf|ci)(\([^)]+\))?:"; then
+            BUMP="patch"
+            echo "Found fix/chore/docs/build/refactor/style/test/perf/ci commit - patch bump"
+          fi
+
+          echo ""
+          echo "Determined bump type: $BUMP"
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
+        id: new_version
+        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
+        run: |
+          LATEST_TAG="${{ steps.latest_tag.outputs.tag }}"
+          BUMP="${{ steps.version_bump.outputs.bump }}"
+
+          # Remove 'v' prefix if present
+          VERSION="${LATEST_TAG#v}"
+
+          # Split version into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Default to 0.0.0 if no valid version
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          case "$BUMP" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update Cargo.toml version
+        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          # Use more precise sed pattern to only match the package version
+          sed -i 's/^version = "[0-9]*\.[0-9]*\.[0-9]*"/version = "'"$NEW_VERSION"'"/' Cargo.toml
+          echo "Updated Cargo.toml to version $NEW_VERSION"
+          head -10 Cargo.toml
+
+      - name: Update Cargo.lock
+        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
+        run: |
+          cargo update --workspace
+          echo "Updated Cargo.lock"
+
+      - name: Commit version bump
+        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore(release): bump version to ${NEW_VERSION}
+
+          Automated version bump based on conventional commits.
+
+          [skip ci]"
+          echo "Created version bump commit"
+
+      - name: Create and push tag
+        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+          git push origin main --follow-tags
+          echo "Pushed tag v${NEW_VERSION}"
+
+      - name: Summary
+        if: steps.check_skip.outputs.skip != 'true'
+        run: |
+          BUMP="${{ steps.version_bump.outputs.bump }}"
+          if [ "$BUMP" = "none" ]; then
+            echo "::notice::No release needed - no conventional commits found since last tag"
+            echo "## No Release" >> $GITHUB_STEP_SUMMARY
+            echo "No conventional commits found that would trigger a version bump." >> $GITHUB_STEP_SUMMARY
+          else
+            VERSION="${{ steps.new_version.outputs.version }}"
+            echo "::notice::Created tag v${VERSION} - release workflow will be triggered"
+            echo "## Version Bump: ${BUMP}" >> $GITHUB_STEP_SUMMARY
+            echo "- Previous tag: ${{ steps.latest_tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+            echo "- New version: v${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The release workflow will now build and publish this version." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Summary (skipped)
+        if: steps.check_skip.outputs.skip == 'true'
+        run: |
+          echo "## Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "This was a version bump commit - no action needed." >> $GITHUB_STEP_SUMMARY
