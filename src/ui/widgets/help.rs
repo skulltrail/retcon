@@ -5,26 +5,53 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
-/// Render the help screen
-pub fn render_help_screen(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+/// Get the total number of lines in the help text
+pub fn help_content_height() -> usize {
+    // This should match the number of lines in build_help_text
+    // We return a constant here to avoid rebuilding the text just to count
+    105 // Approximate number of help lines (including delete, reorder and help navigation sections)
+}
+
+/// Render the help screen with scrolling support
+pub fn render_help_screen(frame: &mut Frame<'_>, area: Rect, scroll: usize, theme: &Theme) {
     let layout = HelpLayout::fullscreen(area);
 
     // Clear background
     frame.render_widget(Clear, layout.outer);
 
+    // Calculate visible height (area minus borders)
+    let visible_height = layout.outer.height.saturating_sub(2) as usize;
+    let scroll_indicator = if scroll > 0 || help_content_height() > visible_height {
+        format!(
+            " Help - Keybindings (↑↓ to scroll) [{}/{}] ",
+            scroll + 1,
+            help_content_height().saturating_sub(visible_height).max(1)
+        )
+    } else {
+        " Help - Keybindings ".to_string()
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.dialog_border)
-        .title(Line::from(" Help - Keybindings ").style(theme.dialog_title))
+        .title(Line::from(scroll_indicator).style(theme.dialog_title))
         .style(ratatui::style::Style::default().bg(theme.dialog_bg));
 
     let help_text = build_help_text(theme);
 
     let para = Paragraph::new(help_text)
         .block(block)
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .scroll((scroll as u16, 0));
 
     frame.render_widget(para, layout.outer);
+}
+
+/// Calculate the maximum scroll offset for the help screen
+pub fn help_max_scroll(area: Rect) -> usize {
+    let layout = HelpLayout::fullscreen(area);
+    let visible_height = layout.outer.height.saturating_sub(2) as usize;
+    help_content_height().saturating_sub(visible_height)
 }
 
 fn build_help_text(theme: &Theme) -> Vec<Line<'static>> {
@@ -148,6 +175,33 @@ fn build_help_text(theme: &Theme) -> Vec<Line<'static>> {
     lines.push(key_line("u", "Undo last change", key_style));
     lines.push(key_line("Ctrl+r", "Redo", key_style));
 
+    // Delete section
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("Delete Commits", title_style)));
+    lines.push(Line::from(""));
+    lines.push(key_line(
+        "d / x",
+        "Mark/unmark commit for deletion",
+        key_style,
+    ));
+    lines.push(Line::from("  (Works on selected commits if any)"));
+    lines.push(Line::from("  (Child commits are reparented)"));
+
+    // Reorder section
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("Reorder Commits", title_style)));
+    lines.push(Line::from(""));
+    lines.push(key_line(
+        "Shift+K / Ctrl+k",
+        "Move commit up (earlier in history)",
+        key_style,
+    ));
+    lines.push(key_line(
+        "Shift+J / Ctrl+j",
+        "Move commit down (later in history)",
+        key_style,
+    ));
+
     // Actions section
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("Actions", title_style)));
@@ -169,6 +223,14 @@ fn build_help_text(theme: &Theme) -> Vec<Line<'static>> {
         "Quit (prompts if unsaved changes)",
         key_style,
     ));
+
+    // Help navigation
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("Help Navigation", title_style)));
+    lines.push(Line::from(""));
+    lines.push(key_line("j/k / ↑↓", "Scroll help up/down", key_style));
+    lines.push(key_line("Ctrl+u/d", "Page up/down in help", key_style));
+    lines.push(key_line("g/G", "Go to top/bottom of help", key_style));
 
     // Footer
     lines.push(Line::from(""));

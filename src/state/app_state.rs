@@ -142,6 +142,9 @@ pub struct AppState {
     /// When enabled, editing author name/email/date will also update the
     /// corresponding committer field unless --separate-author-committer is used.
     pub sync_author_to_committer: bool,
+
+    /// Scroll offset for help screen (vertical)
+    pub help_scroll: usize,
 }
 
 impl AppState {
@@ -177,6 +180,7 @@ impl AppState {
             detail_scroll: 0,
             detail_max_scroll: 0,
             sync_author_to_committer: true,
+            help_scroll: 0,
         }
     }
 
@@ -200,6 +204,21 @@ impl AppState {
     /// Reset detail scroll when cursor changes
     pub fn reset_detail_scroll(&mut self) {
         self.detail_scroll = 0;
+    }
+
+    /// Scroll help screen up
+    pub fn help_scroll_up(&mut self, amount: usize) {
+        self.help_scroll = self.help_scroll.saturating_sub(amount);
+    }
+
+    /// Scroll help screen down
+    pub fn help_scroll_down(&mut self, amount: usize, max_scroll: usize) {
+        self.help_scroll = (self.help_scroll + amount).min(max_scroll);
+    }
+
+    /// Reset help scroll when opening help
+    pub fn reset_help_scroll(&mut self) {
+        self.help_scroll = 0;
     }
 
     /// Total number of columns (Selection, Hash, Name, Email, Date, Message)
