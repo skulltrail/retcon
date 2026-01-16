@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::state::{AppMode, AppState, VisualType};
 use crate::ui::theme::Theme;
 use ratatui::layout::Rect;
@@ -40,7 +42,7 @@ pub fn render_status_bar(frame: &mut Frame<'_>, area: Rect, state: &AppState, th
         let keybindings = get_keybindings(&state.mode);
         for (key, desc) in keybindings {
             spans.push(Span::styled(key, theme.keybinding_key));
-            spans.push(Span::styled(format!(" {} ", desc), theme.keybinding));
+            spans.push(Span::styled(format!(" {desc} "), theme.keybinding));
         }
     }
 

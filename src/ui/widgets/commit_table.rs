@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::git::commit::{CommitData, CommitModifications, EditableField};
 use crate::state::{AppMode, AppState, VisualType};
 use crate::ui::theme::Theme;
@@ -20,6 +22,7 @@ pub enum Column {
 }
 
 impl Column {
+    #[must_use]
     pub fn from_index(idx: usize) -> Option<Self> {
         match idx {
             0 => Some(Column::Selection),
@@ -32,10 +35,12 @@ impl Column {
         }
     }
 
+    #[must_use]
     pub fn is_editable(&self) -> bool {
         !matches!(self, Column::Selection | Column::Hash)
     }
 
+    #[must_use]
     pub fn to_editable_field(&self) -> Option<EditableField> {
         match self {
             Column::Name => Some(EditableField::AuthorName),
@@ -237,11 +242,11 @@ fn build_title(state: &AppState, visible: &[&CommitData]) -> String {
     let deleted = state.deleted_count();
 
     if deleted > 0 && modified > 0 {
-        format!(" Commits ({} modified, {} deleted) ", modified, deleted)
+        format!(" Commits ({modified} modified, {deleted} deleted) ")
     } else if deleted > 0 {
-        format!(" Commits ({} deleted) ", deleted)
+        format!(" Commits ({deleted} deleted) ")
     } else if modified > 0 {
-        format!(" Commits ({} modified) ", modified)
+        format!(" Commits ({modified} modified) ")
     } else {
         format!(" Commits ({}) ", visible.len())
     }
@@ -313,10 +318,10 @@ fn create_row<'a>(commit: &CommitData, ctx: &RowContext<'a>) -> Row<'a> {
     let date_value = if ctx.is_editing && is_cursor_row && ctx.cursor_col == Column::Date as usize {
         ctx.edit_buffer.to_string()
     } else {
-        ctx.mods
-            .and_then(|m| m.author_date)
-            .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
-            .unwrap_or_else(|| commit.format_author_date())
+        ctx.mods.and_then(|m| m.author_date).map_or_else(
+            || commit.format_author_date(),
+            |d| d.format("%Y-%m-%d %H:%M").to_string(),
+        )
     };
     let date_style = cell_style(ctx, Column::Date as usize, date_modified, ctx.theme.date);
     let date = Cell::from(Span::styled(date_value, date_style));
@@ -327,11 +332,10 @@ fn create_row<'a>(commit: &CommitData, ctx: &RowContext<'a>) -> Row<'a> {
         if ctx.is_editing && is_cursor_row && ctx.cursor_col == Column::Message as usize {
             ctx.edit_buffer.to_string()
         } else {
-            let summary = ctx
-                .mods
-                .and_then(|m| m.message.as_ref())
-                .map(|m| m.lines().next().unwrap_or("").to_string())
-                .unwrap_or_else(|| commit.summary.clone());
+            let summary = ctx.mods.and_then(|m| m.message.as_ref()).map_or_else(
+                || commit.summary.clone(),
+                |m| m.lines().next().unwrap_or("").to_string(),
+            );
             truncate_string(&summary, MESSAGE_MAX_WIDTH)
         };
     let message_style = cell_style(
@@ -357,8 +361,7 @@ fn cell_style(ctx: &RowContext<'_>, col: usize, is_modified: bool, base: Style) 
     let is_in_visual = ctx
         .visual_selection
         .as_ref()
-        .map(|v| v.contains_cell(ctx.row_idx, col))
-        .unwrap_or(false);
+        .is_some_and(|v| v.contains_cell(ctx.row_idx, col));
 
     // Determine the base style (modified values are yellow)
     let field_style = if is_modified {
@@ -447,6 +450,7 @@ fn truncate_string(s: &str, max_width: usize) -> String {
 }
 
 /// Get the value for a column from a commit
+#[must_use]
 pub fn get_column_value(
     commit: &CommitData,
     mods: Option<&CommitModifications>,
@@ -461,10 +465,10 @@ pub fn get_column_value(
         Column::Email => mods
             .and_then(|m| m.author_email.clone())
             .unwrap_or_else(|| commit.author.email.clone()),
-        Column::Date => mods
-            .and_then(|m| m.author_date)
-            .map(|d| d.format("%Y-%m-%d %H:%M:%S %z").to_string())
-            .unwrap_or_else(|| commit.format_author_date_full()),
+        Column::Date => mods.and_then(|m| m.author_date).map_or_else(
+            || commit.format_author_date_full(),
+            |d| d.format("%Y-%m-%d %H:%M:%S %z").to_string(),
+        ),
         Column::Message => mods
             .and_then(|m| m.message.clone())
             .unwrap_or_else(|| commit.message.clone()),

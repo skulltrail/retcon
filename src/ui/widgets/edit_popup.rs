@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::git::commit::EditableField;
 use crate::state::AppState;
 use crate::ui::theme::Theme;
@@ -106,8 +108,7 @@ fn build_input_with_cursor<'a>(content: &str, cursor_pos: usize, theme: &Theme) 
         }
 
         // Cursor character (or space if at end)
-        if !at_and_after.is_empty() {
-            let cursor_char = at_and_after.chars().next().unwrap();
+        if let Some(cursor_char) = at_and_after.chars().next() {
             spans.push(Span::styled(
                 cursor_char.to_string(),
                 theme.search_input.add_modifier(Modifier::REVERSED),

@@ -17,7 +17,7 @@ pub struct EditorState<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> EditorState<'a> {
+impl EditorState<'_> {
     /// Create a new editor for a field
     pub fn new(field: EditableField, initial_value: &str) -> Self {
         let lines: Vec<String> = if field.is_multiline() {

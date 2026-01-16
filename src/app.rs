@@ -41,6 +41,9 @@ impl App {
     /// * `repo` - The git repository to operate on
     /// * `commit_limit` - Maximum number of commits to load
     /// * `sync_author_to_committer` - Whether editing author fields should also update committer fields
+    ///
+    /// # Errors
+    /// Returns an error if the repository cannot be read or commits cannot be loaded.
     pub fn new(
         repo: Repository,
         commit_limit: usize,
@@ -68,6 +71,9 @@ impl App {
     }
 
     /// Run the main event loop
+    ///
+    /// # Errors
+    /// Returns an error if terminal operations fail or an unrecoverable error occurs.
     pub fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
         loop {
             // Draw UI
@@ -122,7 +128,7 @@ impl App {
         render_title_bar(frame, layout.title, &self.state, &self.theme);
 
         if let Some(search_area) = layout.search {
-            let result_count = self.state.filtered_indices.as_ref().map(|i| i.len());
+            let result_count = self.state.filtered_indices.as_ref().map(Vec::len);
             render_search_bar(
                 frame,
                 search_area,
@@ -165,17 +171,25 @@ impl App {
         self.state.clear_messages();
 
         match &self.state.mode {
-            AppMode::Normal => self.handle_normal_key(key),
             AppMode::Visual { .. } => self.handle_visual_key(key),
             AppMode::Editing { .. } => self.handle_inline_editing_key(key),
-            AppMode::Search => self.handle_search_key(key),
+            AppMode::Search => {
+                self.handle_search_key(key);
+                Ok(())
+            }
             AppMode::Confirming(action) => {
                 let action = action.clone();
                 self.handle_confirm_key(key, &action)
             }
-            AppMode::Help => self.handle_help_key(key),
-            AppMode::Quitting => self.handle_quit_confirm_key(key),
-            AppMode::Reorder => self.handle_normal_key(key),
+            AppMode::Help => {
+                self.handle_help_key(key);
+                Ok(())
+            }
+            AppMode::Quitting => {
+                self.handle_quit_confirm_key(key);
+                Ok(())
+            }
+            AppMode::Normal | AppMode::Reorder => self.handle_normal_key(key),
         }
     }
 
@@ -204,31 +218,22 @@ impl App {
             (KeyCode::Char('G') | KeyCode::End, KeyModifiers::NONE) => {
                 self.state.cursor_bottom();
             }
-            (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('d'), KeyModifiers::CONTROL) | (KeyCode::PageDown, _) => {
                 self.state.page_down(10);
             }
-            (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
-                self.state.page_up(10);
-            }
-            (KeyCode::PageDown, _) => {
-                self.state.page_down(10);
-            }
-            (KeyCode::PageUp, _) => {
+            (KeyCode::Char('u'), KeyModifiers::CONTROL) | (KeyCode::PageUp, _) => {
                 self.state.page_up(10);
             }
 
             // Horizontal navigation (column selection)
-            (KeyCode::Char('h') | KeyCode::Left, KeyModifiers::NONE) => {
+            (
+                KeyCode::Char('h') | KeyCode::Left | KeyCode::BackTab,
+                KeyModifiers::NONE | KeyModifiers::SHIFT,
+            ) => {
                 self.move_to_prev_editable_column();
             }
-            (KeyCode::Char('l') | KeyCode::Right, KeyModifiers::NONE) => {
+            (KeyCode::Char('l') | KeyCode::Right | KeyCode::Tab, KeyModifiers::NONE) => {
                 self.move_to_next_editable_column();
-            }
-            (KeyCode::Tab, KeyModifiers::NONE) => {
-                self.move_to_next_editable_column();
-            }
-            (KeyCode::BackTab, _) => {
-                self.move_to_prev_editable_column();
             }
 
             // Selection
@@ -243,25 +248,18 @@ impl App {
             }
 
             // Delete commit
-            (KeyCode::Char('d'), KeyModifiers::NONE) => {
-                self.toggle_deletion()?;
-            }
-            (KeyCode::Char('x'), KeyModifiers::NONE) => {
-                self.toggle_deletion()?;
+            (KeyCode::Char('d' | 'x'), KeyModifiers::NONE) => {
+                self.toggle_deletion();
             }
 
             // Move commit up/down (reorder)
-            (KeyCode::Char('K'), KeyModifiers::SHIFT) => {
-                self.move_commit_up()?;
+            (KeyCode::Char('K'), KeyModifiers::SHIFT)
+            | (KeyCode::Char('k'), KeyModifiers::CONTROL) => {
+                self.move_commit_up();
             }
-            (KeyCode::Char('J'), KeyModifiers::SHIFT) => {
-                self.move_commit_down()?;
-            }
-            (KeyCode::Char('k'), KeyModifiers::CONTROL) => {
-                self.move_commit_up()?;
-            }
-            (KeyCode::Char('j'), KeyModifiers::CONTROL) => {
-                self.move_commit_down()?;
+            (KeyCode::Char('J'), KeyModifiers::SHIFT)
+            | (KeyCode::Char('j'), KeyModifiers::CONTROL) => {
+                self.move_commit_down();
             }
 
             // Start inline editing with Enter or 'e'
@@ -315,13 +313,9 @@ impl App {
                 self.state.mode = AppMode::Help;
             }
 
-            // Visual mode - character/line-wise (v) - in table context, this is line-wise
-            (KeyCode::Char('v'), KeyModifiers::NONE) => {
-                self.state.enter_visual_mode(VisualType::Line);
-            }
-
-            // Visual mode - line-wise (V) - same as v for tables
-            (KeyCode::Char('V'), KeyModifiers::SHIFT) => {
+            // Visual mode - line-wise (v or V) - in table context, these are equivalent
+            (KeyCode::Char('v'), KeyModifiers::NONE)
+            | (KeyCode::Char('V'), KeyModifiers::SHIFT) => {
                 self.state.enter_visual_mode(VisualType::Line);
             }
 
@@ -440,16 +434,10 @@ impl App {
             (KeyCode::Char('G') | KeyCode::End, KeyModifiers::NONE) => {
                 self.state.cursor_bottom();
             }
-            (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('d'), KeyModifiers::CONTROL) | (KeyCode::PageDown, _) => {
                 self.state.page_down(10);
             }
-            (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
-                self.state.page_up(10);
-            }
-            (KeyCode::PageDown, _) => {
-                self.state.page_down(10);
-            }
-            (KeyCode::PageUp, _) => {
+            (KeyCode::Char('u'), KeyModifiers::CONTROL) | (KeyCode::PageUp, _) => {
                 self.state.page_up(10);
             }
 
@@ -494,66 +482,64 @@ impl App {
     }
 
     /// Move commit at cursor up (swap with previous)
-    fn move_commit_up(&mut self) -> Result<()> {
+    fn move_commit_up(&mut self) {
         if self.state.filtered_indices.is_some() {
             self.state.set_error("Cannot reorder while filtering");
-            return Ok(());
+            return;
         }
 
         if self.state.cursor == 0 {
             self.state.set_error("Already at top");
-            return Ok(());
+            return;
         }
 
         // Check for merge commits - can't reorder them
         if let Some(commit) = self.state.cursor_commit() {
             if commit.is_merge {
                 self.state.set_error("Cannot reorder merge commits");
-                return Ok(());
+                return;
             }
         }
 
         // AppState.move_commit_up() handles save_undo internally
         self.state.move_commit_up();
         self.state.set_success("Commit moved up");
-        Ok(())
     }
 
     /// Move commit at cursor down (swap with next)
-    fn move_commit_down(&mut self) -> Result<()> {
+    fn move_commit_down(&mut self) {
         if self.state.filtered_indices.is_some() {
             self.state.set_error("Cannot reorder while filtering");
-            return Ok(());
+            return;
         }
 
         if self.state.cursor >= self.state.commits.len().saturating_sub(1) {
             self.state.set_error("Already at bottom");
-            return Ok(());
+            return;
         }
 
         // Check for merge commits - can't reorder them
         if let Some(commit) = self.state.cursor_commit() {
             if commit.is_merge {
                 self.state.set_error("Cannot reorder merge commits");
-                return Ok(());
+                return;
             }
         }
 
         // AppState.move_commit_down() handles save_undo internally
         self.state.move_commit_down();
         self.state.set_success("Commit moved down");
-        Ok(())
     }
 
     /// Toggle deletion on the current commit or selected commits
-    fn toggle_deletion(&mut self) -> Result<()> {
+    fn toggle_deletion(&mut self) {
         // Get commits to potentially delete: selected > cursor
         let commit_ids: Vec<CommitId> = if !self.state.selected.is_empty() {
             self.state.selected.iter().copied().collect()
         } else if let Some(id) = self.state.cursor_commit_id() {
             vec![id]
         } else {
-            return Ok(());
+            return;
         };
 
         // Check if we're toggling on or off (based on first commit)
@@ -564,14 +550,14 @@ impl App {
         let remaining_after = self.state.commits.len() - self.state.deleted.len();
         if will_delete && count >= remaining_after {
             self.state.set_error("Cannot delete all commits");
-            return Ok(());
+            return;
         }
 
         // Save undo state
         let description = if will_delete {
-            format!("Delete {} commit(s)", count)
+            format!("Delete {count} commit(s)")
         } else {
-            format!("Restore {} commit(s)", count)
+            format!("Restore {count} commit(s)")
         };
         self.state.save_undo(&description);
 
@@ -588,25 +574,21 @@ impl App {
         if will_delete {
             if count > 1 {
                 self.state
-                    .set_success(format!("{} commits marked for deletion", count));
+                    .set_success(format!("{count} commits marked for deletion"));
             } else {
                 self.state.set_success("Commit marked for deletion");
             }
         } else if count > 1 {
-            self.state
-                .set_success(format!("{} commits restored", count));
+            self.state.set_success(format!("{count} commits restored"));
         } else {
             self.state.set_success("Commit restored");
         }
-
-        Ok(())
     }
 
     /// Start inline editing at current column
     fn start_inline_editing(&mut self) -> Result<()> {
-        let commit = match self.state.cursor_commit() {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(commit) = self.state.cursor_commit() else {
+            return Ok(());
         };
 
         // Don't allow editing merge commits
@@ -615,9 +597,8 @@ impl App {
             return Ok(());
         }
 
-        let column = match Column::from_index(self.state.column_index) {
-            Some(c) => c,
-            None => return Ok(()),
+        let Some(column) = Column::from_index(self.state.column_index) else {
+            return Ok(());
         };
 
         if !column.is_editable() {
@@ -625,9 +606,8 @@ impl App {
             return Ok(());
         }
 
-        let field = match column.to_editable_field() {
-            Some(f) => f,
-            None => return Ok(()),
+        let Some(field) = column.to_editable_field() else {
+            return Ok(());
         };
 
         // Get current value for the cell
@@ -698,20 +678,18 @@ impl App {
                     }
 
                     let count = commit_ids.len();
-                    self.state.save_undo(&format!(
-                        "Edit {} on {} commit(s)",
-                        field.display_name(),
-                        count
-                    ));
+                    let field_name = field.display_name();
+                    self.state
+                        .save_undo(&format!("Edit {field_name} on {count} commit(s)"));
 
                     for cid in commit_ids {
-                        self.apply_field_edit(cid, &field, &new_value, current_value);
+                        self.apply_field_edit(cid, field, &new_value, current_value);
                     }
 
                     self.state.clear_visual_edit_targets();
 
                     if count > 1 {
-                        self.state.set_success(format!("Updated {} commits", count));
+                        self.state.set_success(format!("Updated {count} commits"));
                     } else {
                         self.state.set_success("Message updated");
                     }
@@ -721,7 +699,7 @@ impl App {
                 self.state.set_error("Editor exited with error");
             }
             Err(e) => {
-                self.state.set_error(format!("Failed to run editor: {}", e));
+                self.state.set_error(format!("Failed to run editor: {e}"));
             }
         }
 
@@ -746,12 +724,12 @@ impl App {
 
             // Confirm edit
             (KeyCode::Enter, KeyModifiers::NONE) => {
-                self.confirm_inline_edit(commit_idx, field)?;
+                self.confirm_inline_edit(commit_idx, field);
             }
 
             // Tab to next field (confirm current and move)
             (KeyCode::Tab, KeyModifiers::NONE) => {
-                self.confirm_inline_edit(commit_idx, field)?;
+                self.confirm_inline_edit(commit_idx, field);
                 if matches!(self.state.mode, AppMode::Normal) {
                     self.move_to_next_editable_column();
                     self.start_inline_editing()?;
@@ -760,7 +738,7 @@ impl App {
 
             // Shift+Tab to previous field
             (KeyCode::BackTab, _) => {
-                self.confirm_inline_edit(commit_idx, field)?;
+                self.confirm_inline_edit(commit_idx, field);
                 if matches!(self.state.mode, AppMode::Normal) {
                     self.move_to_prev_editable_column();
                     self.start_inline_editing()?;
@@ -788,9 +766,8 @@ impl App {
             }
 
             // Delete word backward (Alt+Backspace, Ctrl+W, Ctrl+Backspace)
-            (KeyCode::Backspace, KeyModifiers::ALT)
-            | (KeyCode::Char('w'), KeyModifiers::CONTROL)
-            | (KeyCode::Backspace, KeyModifiers::CONTROL) => {
+            (KeyCode::Backspace, KeyModifiers::ALT | KeyModifiers::CONTROL)
+            | (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
                 self.edit_delete_word_backward();
             }
 
@@ -820,26 +797,19 @@ impl App {
             }
 
             // Move by word (Alt+Arrow, Ctrl+Arrow)
-            (KeyCode::Left, KeyModifiers::ALT) | (KeyCode::Left, KeyModifiers::CONTROL) => {
+            (KeyCode::Left, KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 self.edit_move_word_left();
             }
-            (KeyCode::Right, KeyModifiers::ALT) | (KeyCode::Right, KeyModifiers::CONTROL) => {
+            (KeyCode::Right, KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 self.edit_move_word_right();
             }
 
-            // Move to start/end
-            (KeyCode::Home, _) => {
+            // Move to start/end (Home or Ctrl+A)
+            (KeyCode::Home, _) | (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
                 self.state.edit_cursor = 0;
             }
-            (KeyCode::End, _) => {
-                self.state.edit_cursor = self.state.edit_buffer.len();
-            }
-
-            // Emacs-style start/end (Ctrl+A/E)
-            (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
-                self.state.edit_cursor = 0;
-            }
-            (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+            // Move to end (End or Ctrl+E)
+            (KeyCode::End, _) | (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
                 self.state.edit_cursor = self.state.edit_buffer.len();
             }
 
@@ -897,7 +867,7 @@ impl App {
     }
 
     /// Confirm inline edit and apply changes
-    fn confirm_inline_edit(&mut self, _commit_idx: usize, field: EditableField) -> Result<()> {
+    fn confirm_inline_edit(&mut self, _commit_idx: usize, field: EditableField) {
         let new_value = self.state.edit_buffer.clone();
         let original_value = self.state.edit_original.clone();
 
@@ -905,14 +875,14 @@ impl App {
         if field.is_email() {
             if let Err(e) = validate_email(&new_value) {
                 self.state.set_error(e.to_string());
-                return Ok(());
+                return;
             }
         }
 
         if field.is_date() {
             if let Err(e) = validate_date(&new_value) {
                 self.state.set_error(e.to_string());
-                return Ok(());
+                return;
             }
         }
 
@@ -923,24 +893,22 @@ impl App {
             if commit_ids.is_empty() {
                 self.state.mode = AppMode::Normal;
                 self.state.clear_visual_edit_targets();
-                return Ok(());
+                return;
             }
 
             // Save undo state before modification
             let count = commit_ids.len();
-            self.state.save_undo(&format!(
-                "Edit {} on {} commit(s)",
-                field.display_name(),
-                count
-            ));
+            let field_name = field.display_name();
+            self.state
+                .save_undo(&format!("Edit {field_name} on {count} commit(s)"));
 
             // Apply the modification to all target commits
             for cid in commit_ids {
-                self.apply_field_edit(cid, &field, &new_value, &original_value);
+                self.apply_field_edit(cid, field, &new_value, &original_value);
             }
 
             if count > 1 {
-                self.state.set_success(format!("Updated {} commits", count));
+                self.state.set_success(format!("Updated {count} commits"));
             }
         }
 
@@ -950,8 +918,6 @@ impl App {
         self.state.edit_cursor = 0;
         self.state.clear_visual_edit_targets();
         self.state.mode = AppMode::Normal;
-
-        Ok(())
     }
 
     /// Apply a field edit to a single commit
@@ -963,7 +929,7 @@ impl App {
     fn apply_field_edit(
         &mut self,
         commit_id: CommitId,
-        field: &EditableField,
+        field: EditableField,
         new_value: &str,
         original_value: &str,
     ) {
@@ -1016,7 +982,7 @@ impl App {
     }
 
     /// Handle key in search mode
-    fn handle_search_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_search_key(&mut self, key: KeyEvent) {
         match (key.code, key.modifiers) {
             (KeyCode::Esc, _) => {
                 self.state.clear_filter();
@@ -1035,13 +1001,8 @@ impl App {
                 self.search.delete();
             }
             // Delete word (Alt+Backspace on Mac, Ctrl+W or Ctrl+Backspace)
-            (KeyCode::Backspace, KeyModifiers::ALT) => {
-                self.search.delete_word_backward();
-            }
-            (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
-                self.search.delete_word_backward();
-            }
-            (KeyCode::Backspace, KeyModifiers::CONTROL) => {
+            (KeyCode::Backspace, KeyModifiers::ALT | KeyModifiers::CONTROL)
+            | (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
                 self.search.delete_word_backward();
             }
             // Delete to start of line (Ctrl+U)
@@ -1060,24 +1021,18 @@ impl App {
                 self.search.move_right();
             }
             // Move by word (Alt+Arrow on Mac, Ctrl+Arrow)
-            (KeyCode::Left, KeyModifiers::ALT) | (KeyCode::Left, KeyModifiers::CONTROL) => {
+            (KeyCode::Left, KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 self.search.move_word_left();
             }
-            (KeyCode::Right, KeyModifiers::ALT) | (KeyCode::Right, KeyModifiers::CONTROL) => {
+            (KeyCode::Right, KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 self.search.move_word_right();
             }
-            // Move to start/end
-            (KeyCode::Home, _) => {
+            // Move to start/end (Home or Ctrl+A)
+            (KeyCode::Home, _) | (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
                 self.search.move_start();
             }
-            (KeyCode::End, _) => {
-                self.search.move_end();
-            }
-            // Also support Ctrl+A/E (Emacs-style)
-            (KeyCode::Char('a'), KeyModifiers::CONTROL) => {
-                self.search.move_start();
-            }
-            (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+            // Move to end (End or Ctrl+E)
+            (KeyCode::End, _) | (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
                 self.search.move_end();
             }
             (KeyCode::Char(c), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
@@ -1085,8 +1040,6 @@ impl App {
             }
             _ => {}
         }
-
-        Ok(())
     }
 
     /// Handle key in confirmation dialog
@@ -1103,7 +1056,7 @@ impl App {
             (KeyCode::Char('y'), KeyModifiers::NONE) => {
                 self.execute_confirmed_action(action)?;
             }
-            (KeyCode::Tab, _) | (KeyCode::Left, _) | (KeyCode::Right, _) => {
+            (KeyCode::Tab | KeyCode::Left | KeyCode::Right, _) => {
                 self.confirm_dialog.toggle();
             }
             (KeyCode::Enter, _) => {
@@ -1152,9 +1105,8 @@ impl App {
             if let Err(e) = self.repo.unstash_changes() {
                 // If unstash fails after successful rewrite, warn but don't fail
                 if result.is_ok() {
-                    self.state.set_error(&format!(
-                        "Warning: Could not restore stashed changes: {}. Use 'git stash pop' manually.",
-                        e
+                    self.state.set_error(format!(
+                        "Warning: Could not restore stashed changes: {e}. Use 'git stash pop' manually."
                     ));
                     return Ok(());
                 }
@@ -1165,7 +1117,7 @@ impl App {
         result
     }
 
-    /// Inner implementation of apply_changes (separated for stash handling)
+    /// Inner implementation of `apply_changes` (separated for stash handling)
     fn apply_changes_inner(&mut self) -> Result<()> {
         // Create backup reference
         self.repo.create_backup_ref(&self.state.branch_name)?;
@@ -1197,12 +1149,12 @@ impl App {
     }
 
     /// Handle key in help screen
-    fn handle_help_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_help_key(&mut self, key: KeyEvent) {
         let max_scroll = help_max_scroll(self.last_area);
 
         match (key.code, key.modifiers) {
             // Close help
-            (KeyCode::Esc, _) | (KeyCode::Char('q'), _) | (KeyCode::Char('?'), _) => {
+            (KeyCode::Esc | KeyCode::Char('q' | '?'), _) => {
                 self.state.mode = AppMode::Normal;
             }
 
@@ -1240,22 +1192,18 @@ impl App {
 
             _ => {}
         }
-
-        Ok(())
     }
 
     /// Handle quit confirmation
-    fn handle_quit_confirm_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_quit_confirm_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            KeyCode::Char('y' | 'Y') => {
                 self.should_quit = true;
             }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 self.state.mode = AppMode::Normal;
             }
             _ => {}
         }
-
-        Ok(())
     }
 }

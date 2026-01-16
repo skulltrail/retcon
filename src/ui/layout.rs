@@ -16,11 +16,13 @@ pub const MIN_HEIGHT: u16 = 20;
 
 impl AppLayout {
     /// Check if terminal is too small
+    #[must_use]
     pub fn is_too_small(area: Rect) -> bool {
         area.width < MIN_WIDTH || area.height < MIN_HEIGHT
     }
 
     /// Calculate layout areas based on terminal size and whether search is active
+    #[must_use]
     pub fn new(area: Rect, search_active: bool) -> Self {
         let mut constraints = vec![
             Constraint::Length(1), // Title bar
@@ -34,7 +36,7 @@ impl AppLayout {
         // Use percentage-based sizing: detail pane gets ~30% of remaining space
         let fixed_height = 1 + if search_active { 3 } else { 0 } + 1; // title + search + status
         let available = area.height.saturating_sub(fixed_height);
-        let detail_height = (available * 30 / 100).max(8).min(15); // 30% but between 8-15 lines
+        let detail_height = (available * 30 / 100).clamp(8, 15); // 30% but between 8-15 lines
         let table_min = available.saturating_sub(detail_height).max(5);
 
         // Main content split between table and detail pane
@@ -78,6 +80,7 @@ impl AppLayout {
     }
 
     /// Get the height of the table area (for scroll calculations)
+    #[must_use]
     pub fn table_height(&self) -> usize {
         // Account for borders (2) and header (1)
         self.table.height.saturating_sub(3) as usize
@@ -96,6 +99,7 @@ pub struct DialogLayout {
 
 impl DialogLayout {
     /// Create a centered dialog
+    #[must_use]
     pub fn centered(area: Rect, width: u16, height: u16) -> Self {
         let x = area.x + (area.width.saturating_sub(width)) / 2;
         let y = area.y + (area.height.saturating_sub(height)) / 2;
@@ -134,6 +138,7 @@ pub struct EditorLayout {
 #[allow(dead_code)]
 impl EditorLayout {
     /// Create an editor popup positioned near the cursor
+    #[must_use]
     pub fn near_cursor(area: Rect, cursor_y: u16, multiline: bool) -> Self {
         let height = if multiline { 12 } else { 5 };
         let width = (area.width * 3 / 4).max(60).min(area.width - 4);
@@ -174,6 +179,7 @@ pub struct HelpLayout {
 }
 
 impl HelpLayout {
+    #[must_use]
     pub fn fullscreen(area: Rect) -> Self {
         let margin = 4;
         let outer = Rect::new(

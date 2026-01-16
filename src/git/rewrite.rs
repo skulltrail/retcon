@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc, clippy::implicit_hasher)]
+
 use crate::error::{HistError, Result};
 use crate::git::commit::{CommitData, CommitId, CommitModifications};
 use chrono::{DateTime, FixedOffset};
@@ -39,7 +41,7 @@ pub fn rewrite_history(
     // Build a map of deleted commits to their parents for reparenting
     // When a commit is deleted, its children should be reparented to the deleted commit's parent
     let mut deleted_parent_map: HashMap<git2::Oid, Vec<git2::Oid>> = HashMap::new();
-    for commit_id in deleted.iter() {
+    for commit_id in deleted {
         if let Some(original) = commit_lookup.get(commit_id) {
             deleted_parent_map.insert(
                 original.id.0,
@@ -145,7 +147,7 @@ pub fn rewrite_history(
         .ok_or_else(|| HistError::RewriteFailed("Failed to find new HEAD commit".to_string()))?;
 
     // Update the branch reference
-    let ref_name = format!("refs/heads/{}", branch_name);
+    let ref_name = format!("refs/heads/{branch_name}");
     repo.reference(
         &ref_name,
         *new_head_oid,
@@ -163,22 +165,26 @@ fn build_signature(
     datetime: DateTime<FixedOffset>,
 ) -> Result<Signature<'static>> {
     let time = datetime_to_git_time(&datetime);
-    Signature::new(name, email, &time).map_err(|e| HistError::Git(e))
+    Signature::new(name, email, &time).map_err(HistError::Git)
 }
 
-/// Convert chrono DateTime to git2 Time
+/// Convert chrono `DateTime` to git2 Time
 fn datetime_to_git_time(dt: &DateTime<FixedOffset>) -> Time {
     let offset_minutes = dt.offset().local_minus_utc() / 60;
-    Time::new(dt.timestamp(), offset_minutes as i32)
+    Time::new(dt.timestamp(), offset_minutes)
 }
 
 /// Check if any commits have been modified
 #[allow(dead_code)]
+#[must_use]
 pub fn has_modifications(modifications: &HashMap<CommitId, CommitModifications>) -> bool {
-    modifications.values().any(|m| m.has_modifications())
+    modifications
+        .values()
+        .any(super::commit::CommitModifications::has_modifications)
 }
 
 /// Check if the commit order has changed
+#[must_use]
 pub fn order_changed(original_order: &[CommitId], new_order: &[CommitId]) -> bool {
     if original_order.len() != new_order.len() {
         return true;
@@ -190,6 +196,7 @@ pub fn order_changed(original_order: &[CommitId], new_order: &[CommitId]) -> boo
 }
 
 /// Count total number of modified commits
+#[must_use]
 pub fn count_modified_commits(modifications: &HashMap<CommitId, CommitModifications>) -> usize {
     modifications
         .values()
@@ -198,6 +205,7 @@ pub fn count_modified_commits(modifications: &HashMap<CommitId, CommitModificati
 }
 
 /// Generate a summary of changes for the confirmation dialog
+#[must_use]
 pub fn generate_change_summary(
     commits: &[CommitData],
     modifications: &HashMap<CommitId, CommitModifications>,
@@ -209,16 +217,14 @@ pub fn generate_change_summary(
 
     // Count deleted commits
     if !deleted.is_empty() {
-        summary.push(format!("{} commit(s) will be deleted", deleted.len()));
+        let count = deleted.len();
+        summary.push(format!("{count} commit(s) will be deleted"));
     }
 
     // Count modified commits
     let modified_count = count_modified_commits(modifications);
     if modified_count > 0 {
-        summary.push(format!(
-            "{} commit(s) with modified metadata",
-            modified_count
-        ));
+        summary.push(format!("{modified_count} commit(s) with modified metadata"));
     }
 
     // Check for reordering
@@ -259,13 +265,15 @@ pub fn generate_change_summary(
     }
 
     if modified_count > 5 {
-        summary.push(format!("  ... and {} more", modified_count - 5));
+        let remaining = modified_count - 5;
+        summary.push(format!("  ... and {remaining} more"));
     }
 
     summary
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -302,15 +310,23 @@ mod tests {
         assert_eq!(count_modified_commits(&mods), 0);
 
         // Add a real modification
-        let mut mod1 = CommitModifications::default();
-        mod1.author_name = Some("New Author".to_string());
-        mods.insert(id1, mod1);
+        mods.insert(
+            id1,
+            CommitModifications {
+                author_name: Some("New Author".to_string()),
+                ..Default::default()
+            },
+        );
         assert_eq!(count_modified_commits(&mods), 1);
 
         // Add another modification
-        let mut mod2 = CommitModifications::default();
-        mod2.message = Some("New message".to_string());
-        mods.insert(id2, mod2);
+        mods.insert(
+            id2,
+            CommitModifications {
+                message: Some("New message".to_string()),
+                ..Default::default()
+            },
+        );
         assert_eq!(count_modified_commits(&mods), 2);
     }
 
@@ -349,14 +365,18 @@ mod tests {
             is_merge: false,
         };
 
-        let mut mods: HashMap<CommitId, CommitModifications> = HashMap::new();
-        let mut mod1 = CommitModifications::default();
-        mod1.author_name = Some("New Author".to_string());
-        mod1.author_email = Some("new@example.com".to_string());
-        mods.insert(id1, mod1);
+        let mut modifications: HashMap<CommitId, CommitModifications> = HashMap::new();
+        modifications.insert(
+            id1,
+            CommitModifications {
+                author_name: Some("New Author".to_string()),
+                author_email: Some("new@example.com".to_string()),
+                ..Default::default()
+            },
+        );
         let deleted: HashSet<CommitId> = HashSet::new();
 
-        let summary = generate_change_summary(&[commit], &mods, &deleted, &[id1], &[id1]);
+        let summary = generate_change_summary(&[commit], &modifications, &deleted, &[id1], &[id1]);
 
         assert!(summary.len() >= 2);
         assert!(summary[0].contains("1 commit(s) with modified metadata"));
@@ -395,7 +415,7 @@ mod tests {
         // Create 10 commits
         let commits: Vec<_> = (0..10)
             .map(|i| {
-                let id_str = format!("{}111111111111111111111111111111111111", i);
+                let id_str = format!("{i}111111111111111111111111111111111111");
                 let oid = git2::Oid::from_str(&id_str).unwrap();
                 crate::git::commit::CommitData {
                     id: CommitId(oid),
@@ -404,8 +424,8 @@ mod tests {
                     author_date: dt,
                     committer: crate::git::commit::Person::new("Test", "test@example.com"),
                     committer_date: dt,
-                    message: format!("Commit {}", i),
-                    summary: format!("Commit {}", i),
+                    message: format!("Commit {i}"),
+                    summary: format!("Commit {i}"),
                     parent_ids: vec![],
                     tree_id: git2::Oid::from_str("abcdef1234567890abcdef1234567890abcdef12")
                         .unwrap(),
@@ -415,16 +435,20 @@ mod tests {
             .collect();
 
         // Modify all commits
-        let mut mods: HashMap<CommitId, CommitModifications> = HashMap::new();
+        let mut modifications: HashMap<CommitId, CommitModifications> = HashMap::new();
         for commit in &commits {
-            let mut mod1 = CommitModifications::default();
-            mod1.message = Some("Modified".to_string());
-            mods.insert(commit.id, mod1);
+            modifications.insert(
+                commit.id,
+                CommitModifications {
+                    message: Some("Modified".to_string()),
+                    ..Default::default()
+                },
+            );
         }
         let deleted: HashSet<CommitId> = HashSet::new();
 
         let order: Vec<_> = commits.iter().map(|c| c.id).collect();
-        let summary = generate_change_summary(&commits, &mods, &deleted, &order, &order);
+        let summary = generate_change_summary(&commits, &modifications, &deleted, &order, &order);
 
         // Should show first 5 and then "... and X more"
         assert!(summary.iter().any(|s| s.contains("... and 5 more")));
@@ -440,7 +464,7 @@ mod tests {
         let git_time = super::datetime_to_git_time(&dt);
 
         assert_eq!(git_time.seconds(), dt.timestamp());
-        assert_eq!(git_time.offset_minutes(), (5 * 60 + 30) as i32);
+        assert_eq!(git_time.offset_minutes(), 5 * 60 + 30);
     }
 
     #[test]
@@ -453,7 +477,7 @@ mod tests {
         let git_time = super::datetime_to_git_time(&dt);
 
         assert_eq!(git_time.seconds(), dt.timestamp());
-        assert_eq!(git_time.offset_minutes(), -(8 * 60) as i32);
+        assert_eq!(git_time.offset_minutes(), -(8 * 60));
     }
 
     #[test]

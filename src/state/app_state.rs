@@ -5,9 +5,9 @@ use std::collections::{HashMap, HashSet};
 /// Type of visual selection mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisualType {
-    /// Line-wise selection (V) - selects entire rows
+    /// Line-wise selection (`V`) - selects entire rows
     Line,
-    /// Block-wise selection (Ctrl+V) - selects rectangular region
+    /// Block-wise selection (`Ctrl+V`) - selects rectangular region
     Block,
 }
 
@@ -16,7 +16,7 @@ pub enum VisualType {
 pub enum AppMode {
     /// Normal navigation mode
     Normal,
-    /// Visual selection mode (vim-like)
+    /// Visual selection mode (Vim-like)
     Visual {
         /// Starting position when visual mode was entered (row, column)
         anchor: (usize, usize),
@@ -148,7 +148,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Create a new AppState with loaded commits
+    /// Create a new `AppState` with loaded commits
+    #[must_use]
     pub fn new(commits: Vec<CommitData>, branch_name: String, has_upstream: bool) -> Self {
         let original_order: Vec<CommitId> = commits.iter().map(|c| c.id).collect();
         let current_order = original_order.clone();
@@ -229,42 +230,49 @@ impl AppState {
 
     /// Get the current cursor row index (in visible commits)
     #[allow(dead_code)]
+    #[must_use]
     pub fn cursor_row(&self) -> usize {
         self.cursor
     }
 
     /// Get the current cursor column index (0-5)
     #[allow(dead_code)]
+    #[must_use]
     pub fn cursor_column(&self) -> usize {
         self.column_index
     }
 
     /// Get the current cursor position as (row, column)
     #[allow(dead_code)]
+    #[must_use]
     pub fn cursor_position(&self) -> (usize, usize) {
         (self.cursor, self.column_index)
     }
 
     /// Check if the cursor is on a specific row
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_cursor_on_row(&self, row: usize) -> bool {
         self.cursor == row
     }
 
     /// Check if the cursor is on a specific column
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_cursor_on_column(&self, column: usize) -> bool {
         self.column_index == column
     }
 
     /// Check if the cursor is on a specific cell (row, column)
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_cursor_on_cell(&self, row: usize, column: usize) -> bool {
         self.cursor == row && self.column_index == column
     }
 
     /// Check if the cursor is on an editable column
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_cursor_on_editable_column(&self) -> bool {
         // Columns 0 (Selection) and 1 (Hash) are not editable
         self.column_index >= 2
@@ -324,6 +332,7 @@ impl AppState {
     }
 
     /// Get the visible commits (filtered or all)
+    #[must_use]
     pub fn visible_commits(&self) -> Vec<&CommitData> {
         match &self.filtered_indices {
             Some(indices) => indices
@@ -335,6 +344,7 @@ impl AppState {
     }
 
     /// Get the commit at the cursor position
+    #[must_use]
     pub fn cursor_commit(&self) -> Option<&CommitData> {
         match &self.filtered_indices {
             Some(indices) => indices.get(self.cursor).and_then(|&i| self.commits.get(i)),
@@ -343,6 +353,7 @@ impl AppState {
     }
 
     /// Get the commit ID at the cursor position
+    #[must_use]
     pub fn cursor_commit_id(&self) -> Option<CommitId> {
         self.cursor_commit().map(|c| c.id)
     }
@@ -354,19 +365,21 @@ impl AppState {
 
     /// Check if a commit has modifications
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_modified(&self, id: CommitId) -> bool {
         self.modifications
             .get(&id)
-            .map(|m| m.has_modifications())
-            .unwrap_or(false)
+            .is_some_and(super::super::git::commit::CommitModifications::has_modifications)
     }
 
     /// Check if a commit is selected
+    #[must_use]
     pub fn is_selected(&self, id: CommitId) -> bool {
         self.selected.contains(&id)
     }
 
     /// Check if a commit is marked for deletion
+    #[must_use]
     pub fn is_deleted(&self, id: CommitId) -> bool {
         self.deleted.contains(&id)
     }
@@ -393,6 +406,7 @@ impl AppState {
     }
 
     /// Get count of deleted commits
+    #[must_use]
     pub fn deleted_count(&self) -> usize {
         self.deleted.len()
     }
@@ -616,7 +630,7 @@ impl AppState {
         }
     }
 
-    /// Rebuild commits vector in current_order
+    /// Rebuild commits vector in `current_order`
     fn rebuild_commits_order(&mut self) {
         let commit_map: HashMap<CommitId, CommitData> =
             self.commits.drain(..).map(|c| (c.id, c)).collect();
@@ -629,9 +643,14 @@ impl AppState {
     }
 
     /// Check if there are any pending changes
+    #[must_use]
     pub fn is_dirty(&self) -> bool {
         // Check for modifications
-        if self.modifications.values().any(|m| m.has_modifications()) {
+        if self
+            .modifications
+            .values()
+            .any(super::super::git::commit::CommitModifications::has_modifications)
+        {
             return true;
         }
         // Check for deletions
@@ -646,6 +665,7 @@ impl AppState {
     }
 
     /// Get count of modified commits
+    #[must_use]
     pub fn modified_count(&self) -> usize {
         self.modifications
             .values()
@@ -697,8 +717,9 @@ impl AppState {
         self.mode = AppMode::Normal;
     }
 
-    /// Get the visual selection range as ((start_row, start_col), (end_row, end_col))
+    /// Get the visual selection range as ((`start_row`, `start_col`), (`end_row`, `end_col`))
     /// Returns None if not in visual mode
+    #[must_use]
     pub fn visual_range(&self) -> Option<((usize, usize), (usize, usize))> {
         match &self.mode {
             AppMode::Visual { anchor, .. } => {
@@ -716,6 +737,7 @@ impl AppState {
 
     /// Check if a cell is within the visual selection
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_in_visual_selection(&self, row: usize, col: usize) -> bool {
         match &self.mode {
             AppMode::Visual {
@@ -745,6 +767,7 @@ impl AppState {
 
     /// Check if a row is within the visual selection (for row-level styling)
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_row_in_visual_selection(&self, row: usize) -> bool {
         match &self.mode {
             AppMode::Visual { anchor, .. } => {
@@ -757,6 +780,7 @@ impl AppState {
     }
 
     /// Get the visual selection type if in visual mode
+    #[must_use]
     pub fn visual_type(&self) -> Option<VisualType> {
         match &self.mode {
             AppMode::Visual { visual_type, .. } => Some(*visual_type),
@@ -789,6 +813,7 @@ impl AppState {
     }
 
     /// Get the count of rows in visual selection
+    #[must_use]
     pub fn visual_selection_count(&self) -> usize {
         match self.visual_range() {
             Some(((start_row, _), (end_row, _))) => end_row - start_row + 1,
@@ -827,6 +852,7 @@ impl AppState {
     }
 
     /// Get the commits to edit: visual targets > checkbox selected > just cursor
+    #[must_use]
     pub fn commits_to_edit(&self) -> Vec<CommitId> {
         if let Some(ref targets) = self.visual_edit_targets {
             targets.clone()
@@ -841,6 +867,7 @@ impl AppState {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use chrono::{FixedOffset, TimeZone};

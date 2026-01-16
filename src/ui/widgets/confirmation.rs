@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::git::rewrite::generate_change_summary;
 use crate::state::{AppState, ConfirmAction};
 use crate::ui::layout::DialogLayout;
@@ -33,6 +35,7 @@ impl ConfirmDialogState {
         self.selected_button = (self.selected_button + 1) % 2;
     }
 
+    #[must_use]
     pub fn is_yes_selected(&self) -> bool {
         self.selected_button == 0
     }
@@ -62,7 +65,7 @@ pub fn render_confirmation_dialog(
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme.dialog_border)
-        .title(Line::from(format!(" {} ", title)).style(theme.dialog_title))
+        .title(Line::from(format!(" {title} ")).style(theme.dialog_title))
         .style(ratatui::style::Style::default().bg(theme.dialog_bg));
 
     frame.render_widget(block, layout.outer);
@@ -91,10 +94,10 @@ pub fn render_confirmation_dialog(
     } else {
         theme.dialog_button
     };
-    let no_style = if !dialog_state.is_yes_selected() {
-        theme.dialog_button_selected
-    } else {
+    let no_style = if dialog_state.is_yes_selected() {
         theme.dialog_button
+    } else {
+        theme.dialog_button_selected
     };
 
     let buttons = Line::from(vec![
@@ -124,7 +127,7 @@ fn build_dialog_content(
                 &state.current_order,
             );
 
-            let mut content = vec!["This will rewrite git history.".to_string(), "".to_string()];
+            let mut content = vec!["This will rewrite git history.".to_string(), String::new()];
             content.extend(summary);
 
             let warning = if state.has_upstream {
@@ -141,14 +144,14 @@ fn build_dialog_content(
             let modified = state.modified_count();
             let deleted = state.deleted_count();
             let change_desc = match (modified > 0, deleted > 0) {
-                (true, true) => format!("{} modified and {} deleted commit(s)", modified, deleted),
-                (true, false) => format!("{} modified commit(s)", modified),
-                (false, true) => format!("{} commit(s) marked for deletion", deleted),
+                (true, true) => format!("{modified} modified and {deleted} deleted commit(s)"),
+                (true, false) => format!("{modified} modified commit(s)"),
+                (false, true) => format!("{deleted} commit(s) marked for deletion"),
                 (false, false) => "changes".to_string(),
             };
             let content = vec![
                 format!("You have {}.", change_desc),
-                "".to_string(),
+                String::new(),
                 "Are you sure you want to discard all changes?".to_string(),
             ];
             (title, content, None)
@@ -161,7 +164,7 @@ fn build_dialog_content(
             let total = modified + deleted;
             let content = vec![
                 format!("You have {} unsaved change(s).", total),
-                "".to_string(),
+                String::new(),
                 "Are you sure you want to quit?".to_string(),
             ];
             (title, content, None)

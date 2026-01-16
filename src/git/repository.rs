@@ -1,15 +1,20 @@
+#![allow(clippy::missing_errors_doc)]
+
 use crate::error::{HistError, Result};
 use crate::git::commit::{CommitData, CommitId};
 use git2::{Repository as Git2Repository, RepositoryState, StatusOptions};
 use std::path::Path;
 
-/// Wrapper around git2::Repository with convenience methods for retcon
+/// Wrapper around `git2::Repository` with convenience methods for retcon
 pub struct Repository {
     inner: Git2Repository,
 }
 
 impl Repository {
     /// Open a repository at the given path
+    ///
+    /// # Errors
+    /// Returns an error if the path is not a git repository or the repository is in an invalid state.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let inner = Git2Repository::discover(path)
@@ -161,6 +166,7 @@ impl Repository {
     }
 
     /// Get the inner git2 repository (for rewriting operations)
+    #[must_use]
     pub fn inner(&self) -> &Git2Repository {
         &self.inner
     }
@@ -176,7 +182,7 @@ impl Repository {
         let head = self.inner.head()?;
         let commit = head.peel_to_commit()?;
 
-        let backup_ref = format!("refs/original/heads/{}", branch_name);
+        let backup_ref = format!("refs/original/heads/{branch_name}");
         self.inner
             .reference(
                 &backup_ref,
@@ -230,6 +236,7 @@ impl Repository {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use serial_test::serial;
@@ -259,8 +266,7 @@ mod tests {
             fs::write(&file_path, "test content").unwrap();
             index.add_path(std::path::Path::new("test.txt")).unwrap();
             index.write().unwrap();
-            let tree_id = index.write_tree().unwrap();
-            tree_id
+            index.write_tree().unwrap()
         };
         let tree = repo.find_tree(tree_id).unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])

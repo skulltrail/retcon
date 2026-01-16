@@ -13,7 +13,7 @@ impl fmt::Display for CommitId {
     }
 }
 
-/// Serde support for git2::Oid
+/// Serde support for `git2::Oid`
 mod oid_serde {
     use git2::Oid;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -51,6 +51,7 @@ impl Person {
 
     /// Format as "Name <email>"
     #[allow(dead_code)]
+    #[must_use]
     pub fn format_full(&self) -> String {
         format!("{} <{}>", self.name, self.email)
     }
@@ -93,7 +94,7 @@ pub struct CommitData {
 }
 
 impl CommitData {
-    /// Create CommitData from a git2::Commit
+    /// Create `CommitData` from a `git2::Commit`
     pub fn from_git2_commit(commit: &git2::Commit<'_>) -> Self {
         let author_sig = commit.author();
         let committer_sig = commit.committer();
@@ -133,16 +134,19 @@ impl CommitData {
     }
 
     /// Get formatted author date for display
+    #[must_use]
     pub fn format_author_date(&self) -> String {
         self.author_date.format("%Y-%m-%d %H:%M").to_string()
     }
 
     /// Get formatted author date with timezone
+    #[must_use]
     pub fn format_author_date_full(&self) -> String {
         self.author_date.format("%Y-%m-%d %H:%M:%S %z").to_string()
     }
 
     /// Get formatted committer date with timezone
+    #[must_use]
     pub fn format_committer_date_full(&self) -> String {
         self.committer_date
             .format("%Y-%m-%d %H:%M:%S %z")
@@ -150,11 +154,13 @@ impl CommitData {
     }
 }
 
-/// Convert git2::Time to chrono::DateTime<FixedOffset>
+/// Convert `git2::Time` to `chrono::DateTime`<FixedOffset>
 fn git_time_to_datetime(time: &git2::Time) -> DateTime<FixedOffset> {
     let offset_minutes = time.offset_minutes();
-    let offset =
-        FixedOffset::east_opt(offset_minutes * 60).unwrap_or(FixedOffset::east_opt(0).unwrap());
+    // UTC (offset 0) is always valid - this cannot fail
+    #[allow(clippy::expect_used)]
+    let utc = FixedOffset::east_opt(0).expect("UTC offset is always valid");
+    let offset = FixedOffset::east_opt(offset_minutes * 60).unwrap_or(utc);
     DateTime::from_timestamp(time.seconds(), 0)
         .unwrap_or_default()
         .with_timezone(&offset)
@@ -174,6 +180,7 @@ pub struct CommitModifications {
 
 impl CommitModifications {
     /// Check if any modifications have been made
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.author_name.is_none()
             && self.author_email.is_none()
@@ -185,51 +192,58 @@ impl CommitModifications {
     }
 
     /// Check if any modifications have been made
+    #[must_use]
     pub fn has_modifications(&self) -> bool {
         !self.is_empty()
     }
 
     /// Get the effective author name (modified or original)
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_author_name<'a>(&'a self, original: &'a str) -> &'a str {
         self.author_name.as_deref().unwrap_or(original)
     }
 
     /// Get the effective author email (modified or original)
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_author_email<'a>(&'a self, original: &'a str) -> &'a str {
         self.author_email.as_deref().unwrap_or(original)
     }
 
     /// Get the effective committer name (modified or original)
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_committer_name<'a>(&'a self, original: &'a str) -> &'a str {
         self.committer_name.as_deref().unwrap_or(original)
     }
 
     /// Get the effective committer email (modified or original)
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_committer_email<'a>(&'a self, original: &'a str) -> &'a str {
         self.committer_email.as_deref().unwrap_or(original)
     }
 
     /// Get the effective message (modified or original)
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_message<'a>(&'a self, original: &'a str) -> &'a str {
         self.message.as_deref().unwrap_or(original)
     }
 
     /// Get summary from effective message
     #[allow(dead_code)]
+    #[must_use]
     pub fn effective_summary<'a>(&'a self, original: &'a str) -> &'a str {
         self.message
             .as_deref()
-            .map(|m| m.lines().next().unwrap_or(""))
-            .unwrap_or(original)
+            .map_or(original, |m| m.lines().next().unwrap_or(""))
     }
 
     /// Count how many fields have been modified
     #[allow(dead_code)]
+    #[must_use]
     pub fn modification_count(&self) -> usize {
         let mut count = 0;
         if self.author_name.is_some() {
@@ -272,6 +286,7 @@ pub enum EditableField {
 impl EditableField {
     /// Get all editable fields in order
     #[allow(dead_code)]
+    #[must_use]
     pub fn all() -> &'static [EditableField] {
         &[
             EditableField::AuthorName,
@@ -285,6 +300,7 @@ impl EditableField {
     }
 
     /// Get display name for the field
+    #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
             EditableField::AuthorName => "Author Name",
@@ -299,6 +315,7 @@ impl EditableField {
 
     /// Get short label for table columns
     #[allow(dead_code)]
+    #[must_use]
     pub fn short_label(&self) -> &'static str {
         match self {
             EditableField::AuthorName => "Author",
@@ -313,6 +330,7 @@ impl EditableField {
 
     /// Get next field (for Tab navigation)
     #[allow(dead_code)]
+    #[must_use]
     pub fn next(&self) -> EditableField {
         match self {
             EditableField::AuthorName => EditableField::AuthorEmail,
@@ -327,6 +345,7 @@ impl EditableField {
 
     /// Get previous field (for Shift+Tab navigation)
     #[allow(dead_code)]
+    #[must_use]
     pub fn prev(&self) -> EditableField {
         match self {
             EditableField::AuthorName => EditableField::Message,
@@ -340,6 +359,7 @@ impl EditableField {
     }
 
     /// Is this a date field?
+    #[must_use]
     pub fn is_date(&self) -> bool {
         matches!(
             self,
@@ -348,6 +368,7 @@ impl EditableField {
     }
 
     /// Is this an email field?
+    #[must_use]
     pub fn is_email(&self) -> bool {
         matches!(
             self,
@@ -357,12 +378,14 @@ impl EditableField {
 
     /// Is this a multiline field?
     #[allow(dead_code)]
+    #[must_use]
     pub fn is_multiline(&self) -> bool {
         matches!(self, EditableField::Message)
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
@@ -412,8 +435,10 @@ mod tests {
 
     #[test]
     fn test_commit_modifications_with_author_name() {
-        let mut mods = CommitModifications::default();
-        mods.author_name = Some("New Author".to_string());
+        let mods = CommitModifications {
+            author_name: Some("New Author".to_string()),
+            ..Default::default()
+        };
         assert!(!mods.is_empty());
         assert!(mods.has_modifications());
         assert_eq!(mods.modification_count(), 1);
@@ -421,10 +446,12 @@ mod tests {
 
     #[test]
     fn test_commit_modifications_with_multiple_fields() {
-        let mut mods = CommitModifications::default();
-        mods.author_name = Some("New Author".to_string());
-        mods.author_email = Some("new@example.com".to_string());
-        mods.message = Some("New message".to_string());
+        let mods = CommitModifications {
+            author_name: Some("New Author".to_string()),
+            author_email: Some("new@example.com".to_string()),
+            message: Some("New message".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(mods.modification_count(), 3);
         assert!(mods.has_modifications());
@@ -432,8 +459,10 @@ mod tests {
 
     #[test]
     fn test_commit_modifications_effective_values() {
-        let mut mods = CommitModifications::default();
-        mods.author_name = Some("Modified".to_string());
+        let mods = CommitModifications {
+            author_name: Some("Modified".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(mods.effective_author_name("Original"), "Modified");
         assert_eq!(
@@ -444,8 +473,10 @@ mod tests {
 
     #[test]
     fn test_commit_modifications_effective_message() {
-        let mut mods = CommitModifications::default();
-        mods.message = Some("New message\nSecond line".to_string());
+        let mods = CommitModifications {
+            message: Some("New message\nSecond line".to_string()),
+            ..Default::default()
+        };
 
         assert_eq!(mods.effective_message("Old"), "New message\nSecond line");
         assert_eq!(mods.effective_summary("Old summary"), "New message");
@@ -453,8 +484,10 @@ mod tests {
 
     #[test]
     fn test_commit_modifications_effective_summary_empty_line() {
-        let mut mods = CommitModifications::default();
-        mods.message = Some("\nSecond line".to_string());
+        let mods = CommitModifications {
+            message: Some("\nSecond line".to_string()),
+            ..Default::default()
+        };
 
         // First line is empty, so summary should be empty
         assert_eq!(mods.effective_summary("Old summary"), "");
@@ -539,10 +572,10 @@ mod tests {
         use git2::Time;
 
         // Create a git time: Jan 15, 2024 14:30:00 UTC
-        let git_time = Time::new(1705330200, 0);
+        let git_time = Time::new(1_705_330_200, 0);
         let dt = super::git_time_to_datetime(&git_time);
 
-        assert_eq!(dt.timestamp(), 1705330200);
+        assert_eq!(dt.timestamp(), 1_705_330_200);
         assert_eq!(dt.offset().local_minus_utc(), 0);
     }
 
@@ -551,10 +584,10 @@ mod tests {
         use git2::Time;
 
         // Create a git time with +05:30 offset (330 minutes)
-        let git_time = Time::new(1705330200, 330);
+        let git_time = Time::new(1_705_330_200, 330);
         let dt = super::git_time_to_datetime(&git_time);
 
-        assert_eq!(dt.timestamp(), 1705330200);
+        assert_eq!(dt.timestamp(), 1_705_330_200);
         assert_eq!(dt.offset().local_minus_utc(), 330 * 60);
     }
 

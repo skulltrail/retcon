@@ -2,17 +2,20 @@
 
 > Retroactive Continuity for Git History - A modern TUI for editing commit metadata
 
+[![CI](https://github.com/skulltrail/retcon/actions/workflows/ci.yml/badge.svg)](https://github.com/skulltrail/retcon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io/crates/retcon)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/retcon)
 
 ---
 
 ## Important Notice
 
-**retcon edits commit METADATA only** (author, date, message). It does **NOT** support full interactive rebase operations like squashing, splitting, or reordering commits. This tool is specifically designed for retroactively editing history details, not restructuring your commit graph.
+**retcon** provides a focused set of git history manipulation operations:
 
-If you need to restructure commits (squash, split, reorder), use `git rebase -i` instead.
+- **Metadata editing** - author, date, message (full support)
+- **Commit deletion** - remove commits with automatic child reparenting
+- **Commit reordering** - move commits up/down in history
+
+It does **NOT** support squashing or splitting commits. For those operations, use `git rebase -i`.
 
 ---
 
@@ -22,12 +25,16 @@ If you need to restructure commits (squash, split, reorder), use `git rebase -i`
 - **Edit Commit Messages** - Modify commit messages in your preferred `$EDITOR`
 - **Edit Author Information** - Change author name and email for any commit
 - **Edit Commit Dates** - Adjust both author and committer timestamps
+- **Delete Commits** - Mark commits for deletion; child commits are automatically reparented
+- **Reorder Commits** - Move commits up/down to restructure history order
 - **Search & Filter** - Quickly find commits by hash, author, email, or message content
 - **Batch Operations** - Edit multiple commits at once using checkboxes or visual selection
 - **Visual Selection Mode** - Vim-like visual mode (line-wise `v` and block-wise `Ctrl+v`) for intuitive multi-commit editing
 - **Undo/Redo Support** - Full undo/redo stack for all modifications
 - **Inline Editing** - Edit fields directly in the table with rich keyboard navigation
 - **Safe Operations** - Creates backup refs before rewriting history
+- **Dirty Working Tree Handling** - Automatically stashes uncommitted changes during history rewrite
+- **Author/Committer Sync** - Editing author fields updates committer fields by default (configurable)
 - **Validation** - Email and date format validation before applying changes
 
 ---
@@ -43,7 +50,7 @@ cargo install retcon
 ### From source
 
 ```bash
-git clone https://github.com/yourusername/retcon
+git clone https://github.com/skulltrail/retcon
 cd retcon
 cargo install --path .
 ```
@@ -70,13 +77,20 @@ ret
 # Specify a repository path
 retcon --path /path/to/repo
 
-# Limit number of commits to load
+# Limit number of commits to load (default: 50)
+retcon -n 100
 retcon --limit 100
+
+# Keep author and committer fields separate
+# (By default, editing author fields also updates committer fields)
+retcon --separate-author-committer
+retcon -s
 ```
 
 ### Key Bindings
 
 #### Navigation
+
 - `j` / `↓` - Move cursor down
 - `k` / `↑` - Move cursor up
 - `h` / `←` - Move to previous column
@@ -86,17 +100,20 @@ retcon --limit 100
 - `Ctrl+d` / `Ctrl+u` - Page down/up
 
 #### Editing
+
 - `e` / `Enter` - Start editing current cell
 - `Tab` / `Shift+Tab` - Navigate between columns while editing
 - `Enter` - Confirm edit
 - `Esc` - Cancel edit
 
 #### Selection (for batch editing)
+
 - `Space` - Toggle selection on current commit
 - `Ctrl+a` - Select all commits
 - `Ctrl+n` - Deselect all commits
 
 #### Visual Mode (Vim-like)
+
 - `v` - Enter line-wise visual mode
 - `Ctrl+v` - Enter block-wise visual mode
 - `j/k/h/l` - Extend selection
@@ -104,19 +121,35 @@ retcon --limit 100
 - `Esc` - Exit visual mode
 
 #### Search & Filter
+
 - `/` - Open search bar
 - `Enter` - Apply filter
 - `Esc` - Clear filter
 
 #### Undo/Redo
+
 - `u` - Undo last change
 - `Ctrl+r` - Redo
 
+#### Delete Commits
+
+- `d` / `x` - Mark/unmark commit for deletion
+  - Works on selected commits if any are selected
+  - Child commits are automatically reparented to deleted commit's parent
+
+#### Reorder Commits
+
+- `Shift+K` / `Ctrl+k` - Move commit up (earlier in history)
+- `Shift+J` / `Ctrl+j` - Move commit down (later in history)
+  - Merge commits cannot be reordered
+  - Reordering is disabled while filtering
+
 #### Actions
+
 - `w` - Write changes (rewrites history)
 - `r` - Reset/discard all pending changes
 - `q` - Quit (prompts if there are unsaved changes)
-- `?` - Show help screen
+- `?` - Show help screen (scrollable with j/k, Ctrl+d/u)
 
 ---
 
@@ -133,7 +166,7 @@ retcon --limit 100
 Use the automated setup script:
 
 ```bash
-git clone https://github.com/yourusername/retcon
+git clone https://github.com/skulltrail/retcon
 cd retcon
 ./setup-dev.sh
 ```
@@ -145,6 +178,7 @@ make setup
 ```
 
 This will:
+
 - Install pre-commit hooks
 - Set up commit message linting
 - Install development tools
@@ -205,11 +239,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 ## How It Works
 
 1. **Load Commits** - retcon reads commits from your repository using libgit2
-2. **Make Changes** - Edit commit metadata in the TUI with full undo/redo support
+2. **Make Changes** - Edit metadata, delete, or reorder commits with full undo/redo support
 3. **Apply Changes** - When you write changes (`w`), retcon:
+   - Automatically stashes any uncommitted changes in your working tree
    - Creates a backup ref (`refs/original/refs/heads/<branch>`)
    - Rewrites the commit history with your changes
    - Updates your branch to point to the new history
+   - Restores your stashed changes
 
 **Note:** After rewriting history, you'll need to force-push if the branch was already pushed to a remote:
 

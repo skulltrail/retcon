@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use retcon::{git::Repository, state::app_state::AppState, Result};
 use serial_test::serial;
 use std::fs;
@@ -21,7 +23,7 @@ fn create_test_repo_with_commits(commits: &[(&str, &str)]) -> (tempfile::TempDir
 
     for (i, (filename, message)) in commits.iter().enumerate() {
         let file_path = repo_path.join(filename);
-        fs::write(&file_path, format!("Content {}", i)).unwrap();
+        fs::write(&file_path, format!("Content {i}")).unwrap();
 
         let mut index = repo.index().unwrap();
         index.add_path(std::path::Path::new(filename)).unwrap();
@@ -113,9 +115,11 @@ fn test_commit_rewriting() -> Result<()> {
 
     // Create modifications for the first commit
     let mut modifications = HashMap::new();
-    let mut mod1 = CommitModifications::default();
-    mod1.author_name = Some("Modified Author".to_string());
-    mod1.message = Some("Modified message".to_string());
+    let mod1 = CommitModifications {
+        author_name: Some("Modified Author".to_string()),
+        message: Some("Modified message".to_string()),
+        ..Default::default()
+    };
     modifications.insert(commits[0].id, mod1);
 
     // No deletions

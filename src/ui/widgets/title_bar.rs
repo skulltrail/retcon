@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::state::AppState;
 use crate::ui::theme::Theme;
 use ratatui::layout::Rect;

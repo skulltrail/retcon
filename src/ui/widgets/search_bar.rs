@@ -60,7 +60,7 @@ pub fn render_search_bar(
     // Show result count
     if let Some(count) = result_count {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled(format!("({} matches)", count), theme.info));
+        spans.push(Span::styled(format!("({count} matches)"), theme.info));
     }
 
     let line = Line::from(spans);
@@ -76,6 +76,7 @@ pub struct SearchState {
 }
 
 impl SearchState {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             query: String::new(),
@@ -83,6 +84,7 @@ impl SearchState {
         }
     }
 
+    #[must_use]
     pub fn from_query(query: &str) -> Self {
         Self {
             query: query.to_string(),

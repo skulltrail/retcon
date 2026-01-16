@@ -169,6 +169,7 @@ impl Default for Theme {
 
 impl Theme {
     /// Get style for a field value that may be modified
+    #[must_use]
     pub fn field_style(&self, is_modified: bool, base: Style) -> Style {
         if is_modified {
             self.modified_value

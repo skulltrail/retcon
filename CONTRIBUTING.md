@@ -13,12 +13,14 @@ Thank you for your interest in contributing to retcon! This document provides gu
 ### Initial Setup
 
 1. Clone the repository:
+
    ```bash
-   git clone https://github.com/yourusername/retcon.git
+   git clone https://github.com/skulltrail/retcon.git
    cd retcon
    ```
 
 2. Build the project:
+
    ```bash
    cargo build
    ```
@@ -35,21 +37,25 @@ This project uses [pre-commit](https://pre-commit.com/) to maintain code quality
 ### Installing Pre-commit Hooks
 
 1. Install pre-commit (one-time setup):
+
    ```bash
    pip install pre-commit
    ```
 
    Or using pipx (recommended):
+
    ```bash
    pipx install pre-commit
    ```
 
    Or using Homebrew (macOS):
+
    ```bash
    brew install pre-commit
    ```
 
 2. Install the git hooks (run from project root):
+
    ```bash
    pre-commit install
    ```
@@ -73,22 +79,26 @@ The pre-commit hooks will automatically run on staged files before each commit:
 ### Running Hooks Manually
 
 Run all hooks on all files (useful before pushing):
+
 ```bash
 pre-commit run --all-files
 ```
 
 Run specific hook:
+
 ```bash
 pre-commit run cargo-fmt --all-files
 pre-commit run cargo-clippy --all-files
 ```
 
 Update hooks to latest versions:
+
 ```bash
 pre-commit autoupdate
 ```
 
 Skip hooks (not recommended, use sparingly):
+
 ```bash
 git commit --no-verify -m "your message"
 ```
@@ -134,6 +144,7 @@ type(scope): subject
 ### Examples
 
 Good commit messages:
+
 ```
 feat(ui): add sorting to commit table
 fix(git): handle empty repositories correctly
@@ -147,6 +158,7 @@ chore: update dependencies
 ```
 
 Breaking changes:
+
 ```
 feat(api)!: remove deprecated rebase function
 
@@ -157,6 +169,7 @@ Use the new rewrite API instead.
 ### Scope (Optional but Recommended)
 
 Common scopes for this project:
+
 - `ui`: User interface components
 - `git`: Git operations
 - `state`: Application state management
@@ -185,16 +198,19 @@ Common scopes for this project:
 ## Testing
 
 Run all tests:
+
 ```bash
 cargo test
 ```
 
 Run with output:
+
 ```bash
 cargo test -- --nocapture
 ```
 
 Run specific test:
+
 ```bash
 cargo test test_name
 ```
@@ -202,11 +218,13 @@ cargo test test_name
 ## Building
 
 Debug build:
+
 ```bash
 cargo build
 ```
 
 Release build (optimized):
+
 ```bash
 cargo build --release
 ```
@@ -214,11 +232,13 @@ cargo build --release
 ## Running
 
 Run from source:
+
 ```bash
 cargo run
 ```
 
 Run with arguments:
+
 ```bash
 cargo run -- [args]
 ```
@@ -228,6 +248,7 @@ cargo run -- [args]
 ### Pre-commit hooks fail
 
 If hooks fail:
+
 1. Read the error message carefully
 2. Fix the issues reported
 3. Stage the fixes: `git add .`
@@ -236,6 +257,7 @@ If hooks fail:
 ### Cargo clippy warnings
 
 Fix all Clippy warnings before committing. If you believe a warning is a false positive, you can allow it with:
+
 ```rust
 #[allow(clippy::lint_name)]
 ```
@@ -245,6 +267,7 @@ But document why the warning should be ignored.
 ### Formatting issues
 
 Run `cargo fmt` to automatically format your code:
+
 ```bash
 cargo fmt
 ```
