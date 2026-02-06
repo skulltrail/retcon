@@ -2,7 +2,7 @@ pub mod commit_table;
 pub mod confirmation;
 pub mod detail_pane;
 pub mod edit_popup;
-pub mod editor;
+
 pub mod help;
 pub mod search_bar;
 pub mod status_bar;

@@ -150,17 +150,11 @@ jobs:
           echo "Updated Cargo.toml to version $NEW_VERSION"
           head -10 Cargo.toml
 
-      - name: Update Cargo.lock
-        if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
-        run: |
-          cargo update --workspace
-          echo "Updated Cargo.lock"
-
       - name: Commit version bump
         if: steps.check_skip.outputs.skip != 'true' && steps.version_bump.outputs.bump != 'none'
         run: |
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml
           git commit -m "chore(release): bump version to ${NEW_VERSION}
 
           Automated version bump based on conventional commits.

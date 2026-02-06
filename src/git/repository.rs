@@ -253,6 +253,9 @@ mod tests {
         opts.initial_head("main");
         let repo = Git2Repository::init_opts(&repo_path, &opts).unwrap();
 
+        // Explicitly set HEAD to ensure "main" branch regardless of system git config
+        repo.set_head("refs/heads/main").unwrap();
+
         // Configure user for commits
         let mut config = repo.config().unwrap();
         config.set_str("user.name", "Test User").unwrap();

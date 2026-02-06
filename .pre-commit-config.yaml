@@ -25,11 +25,11 @@ repos:
 
       # Check for added large files (over 500KB)
       - id: check-added-large-files
-        args: ['--maxkb=500']
+        args: ["--maxkb=500"]
 
       # Validate YAML files
       - id: check-yaml
-        args: ['--unsafe']  # Allow custom YAML tags
+        args: ["--unsafe"] # Allow custom YAML tags
 
       # Validate TOML files
       - id: check-toml
@@ -49,7 +49,7 @@ repos:
         name: cargo fmt
         description: Check Rust code formatting
         entry: cargo fmt
-        args: ['--', '--check']
+        args: ["--", "--check"]
         language: system
         types: [rust]
         pass_filenames: false
@@ -61,12 +61,12 @@ repos:
         description: Run Clippy lints on Rust code
         entry: cargo clippy
         args:
-          - '--workspace'
-          - '--all-targets'
-          - '--all-features'
-          - '--'
-          - '-D'
-          - 'warnings'
+          - "--workspace"
+          - "--all-targets"
+          - "--all-features"
+          - "--"
+          - "-D"
+          - "warnings"
         language: system
         types: [rust]
         pass_filenames: false
@@ -77,12 +77,12 @@ repos:
         name: cargo check
         description: Check Rust code compiles
         entry: cargo check
-        args: ['--workspace', '--all-targets', '--all-features']
+        args: ["--workspace", "--all-targets", "--all-features"]
         language: system
         types: [rust]
         pass_filenames: false
         # Moderate speed: faster than full build
-        stages: [manual]  # Only run when explicitly requested (optional)
+        stages: [manual] # Only run when explicitly requested (optional)
 
   # Conventional commit message validation
   - repo: https://github.com/compilerla/conventional-pre-commit
@@ -91,4 +91,4 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args:
-          - --force-scope  # Optional: require scope like feat(ui): message
+          - --verbose # Enable verbose output
