@@ -1,7 +1,7 @@
 {
   "name": "retcon",
   "version": "0.1.0",
-  "description": "Retroactive Continuity CLI - A modern TUI for editing git history",
+  "description": "Retroactive Continuity CLI - A modern TUI for writing (git) history",
   "private": true,
   "scripts": {
     "commitlint": "commitlint --edit"

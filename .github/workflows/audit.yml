@@ -75,6 +75,9 @@ jobs:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Requires Dependency graph to be enabled in repo settings:
+    # https://github.com/skulltrail/retcon/settings/security_analysis
+    continue-on-error: true
 
     steps:
       - name: Checkout code

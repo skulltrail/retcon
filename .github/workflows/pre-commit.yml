@@ -72,6 +72,7 @@ jobs:
           echo "$PR_TITLE" | npx commitlint
 
       - name: Validate commit messages
+        if: github.actor != 'dependabot[bot]'
         env:
           # Use environment variables to safely handle commit SHAs
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
